@@ -1,0 +1,55 @@
+# Pipeline configuration
+# Secrets (credentials, connection strings) are NEVER stored here --
+# they're pulled at runtime from a Key Vault / Secrets Manager-backed
+# Databricks secret scope (see src/ingestion scripts).
+
+environment: production
+
+storage:
+  cloud: azure   # or aws
+  raw_landing_path: "abfss://raw@storageaccount.dfs.core.windows.net/"
+  # aws equivalent: "s3://raw-bucket/"
+
+catalog:
+  name: lakehouse_catalog
+  schemas:
+    bronze: bronze
+    silver: silver
+    gold: gold
+    governance: governance
+
+ingestion:
+  orders:
+    mode: batch_incremental
+    watermark_column: updated_at
+    schedule: "0 * * * *"        # hourly
+  clickstream:
+    mode: autoloader
+    schedule: "0 */2 * * *"       # sweep every 2 hours (trigger=availableNow)
+  payments:
+    mode: batch_incremental
+    schedule: "0 1 * * *"          # daily at 1am
+  marketing_spend:
+    mode: batch_full
+    schedule: "0 2 * * *"          # daily at 2am
+
+data_quality:
+  orders:
+    null_checks: [customer_id, order_id, order_date]
+    range_checks:
+      amount: { min: 0 }
+
+scd2_tracked_attributes:
+  dim_product: [category, product_name]
+  dim_customer: [customer_segment, region]
+
+optimize_schedule:
+  frequency: weekly
+  tables:
+    - gold.fact_orders
+    - gold.fact_clickstream
+  zorder_columns:
+    gold.fact_orders: [customer_id]
+    gold.fact_clickstream: [customer_id]
+
+vacuum_retention_hours: 168   # 7 days
