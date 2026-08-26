@@ -10,9 +10,12 @@ import sys
 
 import pytest
 
-_SRC = os.path.join(os.path.dirname(__file__), "..", "src")
-for _layer in ("ingestion", "bronze", "silver", "gold"):
-    sys.path.insert(0, os.path.abspath(os.path.join(_SRC, _layer)))
+_SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
+# src/ itself, so `from common.data_quality import ...` (the shared package) works.
+sys.path.insert(0, _SRC)
+# plus each layer dir, so `from silver_transform_orders import ...` works.
+for _layer in ("ingestion", "bronze", "silver", "gold", "maintenance"):
+    sys.path.insert(0, os.path.join(_SRC, _layer))
 
 
 @pytest.fixture(scope="session")

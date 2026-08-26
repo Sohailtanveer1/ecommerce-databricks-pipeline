@@ -1,24 +1,56 @@
-# E-Commerce Lakehouse Pipeline — Databricks / Delta Lake / Azure or AWS
+# E-Commerce Lakehouse Pipeline — Azure · Databricks · Delta Lake
 
-An end-to-end Medallion Architecture data pipeline for a small e-commerce company,
-built on Databricks and Delta Lake. Designed to be right-sized for a small
-company's scale and budget — not over-engineered for enterprise volume.
+An end-to-end, **industry-standard batch data platform** for a small e-commerce
+company: three real ingestion patterns → Medallion (Bronze/Silver/Gold) on
+Databricks/Delta → BI serving. Orchestrated by **Azure Data Factory**, governed by
+**Unity Catalog**, provisioned with **Terraform**, shipped via **CI/CD**.
 
-## Architecture Overview
+Deployable on an Azure + Databricks free trial — see **[docs/RUNBOOK.md](docs/RUNBOOK.md)**.
+Interview prep: **[docs/INTERVIEW_PLAYBOOK.md](docs/INTERVIEW_PLAYBOOK.md)**.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    A["CSV files (ADLS landing)"]:::src
+    B[("PostgreSQL — Docker Desktop")]:::src
+    C{{"REST API — FX rates"}}:::src
+
+    subgraph ADF["Azure Data Factory — orchestrator"]
+      SHIR["Self-Hosted IR"] --> COPY["Copy activities"]
+    end
+
+    subgraph Lakehouse["Databricks + Delta / Unity Catalog"]
+      BR["Bronze — raw, append-only"]
+      SI["Silver — clean, dedup, validate, quarantine"]
+      GO["Gold — SCD2 dims, facts, FX-normalized"]
+    end
+
+    MV[["Materialized Views — Power BI / SQL Warehouse"]]:::serve
+
+    A -->|Auto Loader| BR
+    B --> SHIR
+    COPY -->|Parquet to landing| BR
+    C -->|Databricks job| BR
+    ADF -.triggers.-> Lakehouse
+    BR --> SI --> GO --> MV
+
+    classDef src fill:#e8f0fe,stroke:#4c6ef5;
+    classDef serve fill:#e6fcf5,stroke:#0ca678;
 ```
-Sources                Ingestion              Bronze          Silver           Gold                    Serving
---------                ---------              ------          ------           ----                    -------
-Transactional DB   →   Scheduled batch    →   bronze.orders  → silver.orders  → gold.fact_orders    →  Materialized
-(orders, customers)    (incremental pull)                                        gold.dim_product        Views
-                                                                                   (SCD Type 2)
-Clickstream events →   Auto Loader        →   bronze.events  → silver.events  → gold.fact_clickstream →  Power BI /
-(unpredictable                                                                                            Databricks
- arrival)                                                                                                 SQL Warehouse
 
-Payment API        →   Scheduled batch    →   bronze.payments → silver.payments
-Marketing Ads API  →   Scheduled batch    →   bronze.ad_spend → silver.ad_spend → gold.fact_marketing_spend
-```
+| Layer | Tech |
+|---|---|
+| Sources | CSV in ADLS Gen2 · PostgreSQL on Docker (JDBC via SHIR) · REST API (FX rates) |
+| Orchestration | Azure Data Factory (Copy + Databricks activities, tumbling-window incremental) |
+| Compute / storage | Databricks (job clusters) · Delta Lake on ADLS Gen2 |
+| Governance | Unity Catalog — grants, column masks, row filters, lineage/audit |
+| Secrets | Azure Key Vault (KV-backed Databricks scope + ADF references) |
+| IaC | Terraform (foundation + platform layers) |
+| CI/CD | GitHub Actions — lint/test, `bundle validate`, `terraform plan/apply` (OIDC) |
+
+See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**, **[docs/SECURITY_GOVERNANCE.md](docs/SECURITY_GOVERNANCE.md)**,
+**[docs/DATA_QUALITY.md](docs/DATA_QUALITY.md)**, **[docs/OPTIMIZATION.md](docs/OPTIMIZATION.md)**.
 
 ## Design Decisions (and why)
 
@@ -37,16 +69,22 @@ Marketing Ads API  →   Scheduled batch    →   bronze.ad_spend → silver.ad_
 
 ```
 ├── src/
+│   ├── common/          # Shared: tuned Spark session, config, data-quality, Delta optimize
 │   ├── ingestion/       # Batch extract + Auto Loader ingestion scripts
 │   ├── bronze/          # Bronze layer loaders
-│   ├── silver/          # Cleaning, dedup, validation
+│   ├── silver/          # Cleaning, dedup, config-driven validation
 │   ├── gold/             # Dimensional model: SCD2 dimensions, fact merges
+│   ├── maintenance/      # Weekly OPTIMIZE / ANALYZE / VACUUM job
 │   └── governance/       # Unity Catalog setup: grants, masks, row filters
-├── sql/                  # DDL for all layers + materialized views
-├── config/               # Pipeline configuration (paths, watermarks, etc.)
-├── resources/            # Databricks Asset Bundle job definition (deployable)
+├── infra/terraform/      # IaC: foundation (Azure) + platform (Unity Catalog)
+├── adf/                  # Azure Data Factory datasets / pipeline / trigger
+├── docker/               # Local Postgres source (compose + seed data)
+├── data/sample/          # Sample CSV for the ADLS landing source
+├── sql/                  # DDL (self-optimizing tables) + views + governance
+├── config/               # Pipeline configuration (paths, watermarks, DQ rules)
+├── resources/            # Databricks Asset Bundle job definitions (deployable)
 ├── workflows/            # Legacy raw job JSON (reference only)
-├── docs/                 # Architecture notes, data dictionary
+├── docs/                 # Architecture, runbook, security, interview playbook
 ├── tests/                # Unit tests for dedup / transformation logic
 ├── databricks.yml        # Asset Bundle: dev / staging / prod targets
 ├── .github/workflows/    # CI (lint + test + bundle validate) and CD (deploy)

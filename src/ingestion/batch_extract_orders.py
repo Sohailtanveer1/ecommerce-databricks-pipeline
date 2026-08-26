@@ -9,10 +9,17 @@ standing up CDC infrastructure (Debezium/Fivetran), unless near-real-time
 order visibility becomes a genuine business requirement.
 """
 
+import os
+import sys
 from datetime import datetime
 
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col
+# Make src/ importable when run as a Databricks spark_python_task.
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from pyspark.sql import SparkSession  # noqa: E402
+from pyspark.sql.functions import col  # noqa: E402
+
+from common.spark_session import get_spark  # noqa: E402
 
 RAW_LANDING_PATH = "abfss://raw@storageaccount.dfs.core.windows.net/erp/orders/"
 # For AWS: "s3://raw-bucket/erp/orders/"
@@ -38,11 +45,7 @@ def get_last_watermark(spark: SparkSession, source_name: str) -> str:
     """Reads the last successfully processed watermark for a given source."""
     # Parameterized column comparison (not an f-string predicate) so source_name
     # can never be interpreted as SQL.
-    result = (
-        spark.read.table(WATERMARK_TABLE)
-        .filter(col("source_name") == source_name)
-        .collect()
-    )
+    result = spark.read.table(WATERMARK_TABLE).filter(col("source_name") == source_name).collect()
     if not result:
         return "1970-01-01 00:00:00"  # first-ever run
     return result[0]["last_watermark"]
@@ -71,33 +74,38 @@ def extract_orders(spark: SparkSession, db_url: str, db_props: dict):
 
     query = f"""
         (SELECT order_id, customer_id, product_id, order_date, amount,
-                order_status, updated_at
+                currency, order_status, updated_at
          FROM orders
          WHERE updated_at > '{last_watermark}') t
     """
 
-    new_orders_df = spark.read.jdbc(url=db_url, table=query, properties=db_props)
+    # Cache once so the single JDBC pull feeds the count, the max-watermark, and
+    # the write -- instead of re-executing the source query three times.
+    new_orders_df = spark.read.jdbc(url=db_url, table=query, properties=db_props).cache()
 
-    row_count = new_orders_df.count()
+    # count + max watermark in a single aggregation pass.
+    stats = new_orders_df.selectExpr(
+        "count(*) as cnt", "max(updated_at) as max_updated_at"
+    ).collect()[0]
+    row_count = stats["cnt"]
     if row_count == 0:
         print(f"No new orders since watermark {last_watermark}")
+        new_orders_df.unpersist()
         return
 
     run_date = datetime.now().strftime("%Y-%m-%d")
     output_path = f"{RAW_LANDING_PATH}{run_date}/"
     new_orders_df.write.mode("append").json(output_path)
 
-    new_watermark = (
-        new_orders_df.selectExpr("max(updated_at) as max_updated_at")
-        .collect()[0]["max_updated_at"]
-    )
+    new_watermark = stats["max_updated_at"]
     save_watermark(spark, "orders", str(new_watermark))
+    new_orders_df.unpersist()
 
     print(f"Extracted {row_count} new/updated orders. New watermark: {new_watermark}")
 
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.getOrCreate()
+    spark = get_spark("batch-extract-orders")
 
     db_url = dbutils.secrets.get(scope="kv-scope", key="orders-db-jdbc-url")
     db_props = {

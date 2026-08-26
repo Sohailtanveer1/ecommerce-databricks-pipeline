@@ -33,23 +33,65 @@ ingestion:
     mode: batch_full
     schedule: "0 2 * * *"          # daily at 2am
 
+# ------------------------------------------------------------------
+# Data quality / validation rules, consumed by common.data_quality.from_config.
+# on_failure: fail (stop pipeline) | warn (log, pass through) | quarantine
+# (route bad rows to a side table, pass the rest).
+# ------------------------------------------------------------------
 data_quality:
   orders:
-    null_checks: [customer_id, order_id, order_date]
-    range_checks:
+    on_failure: quarantine
+    quarantine_table: silver.orders_quarantine
+    not_null: [order_id, customer_id, order_date]
+    unique: [order_id]
+    ranges:
       amount: { min: 0 }
+    allowed_values:
+      order_status: [pending, paid, shipped, delivered, cancelled, returned]
+    min_row_count: 0
+    freshness:
+      column: updated_at
+      max_age_hours: 48
+
+  customers:
+    on_failure: quarantine
+    quarantine_table: silver.customers_quarantine
+    not_null: [customer_id]
+    unique: [customer_id]
+    regex:
+      email: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+
+  clickstream_events:
+    on_failure: warn
+    not_null: [event_id, event_type, event_timestamp]
+    allowed_values:
+      event_type: [page_view, add_to_cart, checkout, purchase, remove_from_cart]
 
 scd2_tracked_attributes:
   dim_product: [category, product_name]
   dim_customer: [customer_segment, region]
 
-optimize_schedule:
+# ------------------------------------------------------------------
+# Optimization / maintenance, consumed by src/maintenance/table_maintenance.py.
+# Prefers liquid clustering (cluster_by); zorder is the fallback layout.
+# ------------------------------------------------------------------
+optimization:
   frequency: weekly
+  vacuum_retention_hours: 168        # 7 days
+  table_properties:
+    delta.autoOptimize.optimizeWrite: "true"
+    delta.autoOptimize.autoCompact: "true"
+    delta.tuneFileSizesForRewrites: "true"
+    delta.enableDeletionVectors: "true"
   tables:
-    - gold.fact_orders
-    - gold.fact_clickstream
-  zorder_columns:
-    gold.fact_orders: [customer_id]
-    gold.fact_clickstream: [customer_id]
-
-vacuum_retention_hours: 168   # 7 days
+    gold.fact_orders:
+      cluster_by: [order_date, customer_id]
+      analyze_columns: [customer_id, product_id, order_date]
+    gold.fact_clickstream:
+      cluster_by: [event_timestamp, customer_id]
+      analyze_columns: [customer_id, event_type]
+    silver.orders:
+      cluster_by: [order_id]
+    gold.dim_product:
+      zorder: [product_id]
+      vacuum: true

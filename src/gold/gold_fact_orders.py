@@ -7,8 +7,16 @@ sql/materialized_views.sql), not baked in here -- this keeps the fact
 table simple and avoids re-writing fact rows when a dimension changes.
 """
 
-from pyspark.sql import SparkSession
-from delta.tables import DeltaTable
+import os
+import sys
+
+# Make src/ importable when run as a Databricks spark_python_task.
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from delta.tables import DeltaTable  # noqa: E402
+from pyspark.sql import SparkSession  # noqa: E402
+
+from common.spark_session import get_spark  # noqa: E402
 
 SILVER_ORDERS_TABLE = "silver.orders"
 GOLD_FACT_ORDERS_TABLE = "gold.fact_orders"
@@ -25,10 +33,10 @@ def run(spark: SparkSession):
         .whenNotMatchedInsertAll()
         .execute()
     )
-
-    print(f"fact_orders merge complete: {silver_orders.count()} rows processed")
+    # MERGE reports its own inserted/updated metrics in the Delta history; no
+    # extra full-table .count() action needed here.
+    print(f"fact_orders merge complete into {GOLD_FACT_ORDERS_TABLE}")
 
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.getOrCreate()
-    run(spark)
+    run(get_spark("gold-fact-orders"))

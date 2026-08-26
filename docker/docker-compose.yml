@@ -1,0 +1,28 @@
+# Local "transactional ERP" database — the JDBC source (Source #2).
+# ADF's Self-Hosted Integration Runtime (running on this same machine) reaches
+# it at host.docker.internal:5432.
+#
+#   docker compose -f docker/docker-compose.yml up -d
+#
+services:
+  postgres:
+    image: postgres:16
+    container_name: ecommerce-postgres
+    environment:
+      POSTGRES_DB: ecommerce
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Seed schema + data + a read-only user run once on first init.
+      - ./seed:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ecommerce"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

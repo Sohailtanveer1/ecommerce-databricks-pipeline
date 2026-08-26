@@ -39,7 +39,21 @@ _SUCCESS
 *.swp
 .DS_Store
 
-# Secrets — never commit credentials (they live in a secret scope)
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+.terraformrc
+terraform.rc
+.terraform.lock.hcl
+
+# Secrets — never commit credentials (they live in Key Vault / a secret scope)
 .env
 *.pem
 *.key

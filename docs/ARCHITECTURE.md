@@ -1,5 +1,30 @@
 # Architecture Notes
 
+## Azure platform &amp; orchestration
+
+The pipeline runs on Azure: **ADLS Gen2** (lakehouse storage), **Databricks**
+(compute + Delta), **Azure Data Factory** (batch orchestration), **Key Vault**
+(secrets), **Unity Catalog** (governance), all provisioned by **Terraform**.
+
+Three sources, each a distinct ingestion pattern:
+
+1. **CSV files** land in the ADLS `landing` container → **Auto Loader** →
+   `bronze.marketing_ad_spend`.
+2. **PostgreSQL** (local Docker "ERP") → ADF **Copy** over a **Self-Hosted
+   Integration Runtime** → Parquet in `landing/orders` → `bronze.orders`. The
+   SHIR is the bridge from cloud ADF to a database on the developer's machine
+   (a cloud IR can't reach `localhost`) — the same mechanism used for real
+   on-prem sources.
+3. **REST API** (FX rates, keyless) → a Databricks job (`rest_api_fx.py`) →
+   `bronze.fx_rates`. FX exists to normalize multi-currency orders to USD in Gold.
+
+**ADF is the control plane:** it copies the JDBC source and lands files, then
+triggers the Databricks Bronze→Silver→Gold jobs with success-dependency chaining,
+retries, and failure alerts. Incremental extraction uses **tumbling-window
+bounds** from the trigger (no watermark table needed; every window re-runnable).
+Databricks-native orchestration via the Asset Bundle job is kept as a portable
+alternative.
+
 ## Why Medallion Architecture
 
 Bronze/Silver/Gold separation means:
@@ -61,6 +86,41 @@ keeping compute cost bounded to actual run time.
   unauthorized queries transparently see a masked value.
 - Row-level security scopes fact table access by region where needed.
 - Lineage and audit logging are automatic across the whole pipeline.
+
+## Data quality / validation
+
+Validation is centralized in a config-driven framework (`src/common/data_quality.py`,
+rules in `config/pipeline_config.yaml`), not hand-coded per script. See
+[DATA_QUALITY.md](DATA_QUALITY.md) for the full rule set. Key properties:
+
+- **Single-pass evaluation.** All row-level rules compile into one `_dq_errors`
+  column evaluated in a single job, replacing the old pattern of one
+  `df.filter(...).count()` action per rule (each a separate full scan).
+- **Three failure modes per dataset:** `fail` (stop the pipeline), `warn`
+  (log, pass through), `quarantine` (route bad rows to a `*_quarantine` side
+  table, publish the rest). Orders/customers quarantine; clickstream warns.
+- **Rule types:** not-null, range, allowed-values (domain), regex, uniqueness
+  (business key), referential integrity (broadcast anti-join), row-count
+  floor, and freshness (max timestamp age).
+
+## Performance &amp; cost optimization
+
+See [OPTIMIZATION.md](OPTIMIZATION.md). Highlights:
+
+- **Self-optimizing tables:** every Delta table sets `optimizeWrite` +
+  `autoCompact` (no small-file problem between maintenance runs),
+  `tuneFileSizesForRewrites` on MERGE-heavy tables, and deletion vectors.
+- **Liquid clustering** on fact tables (`CLUSTER BY`) instead of static date
+  partitioning + separate ZORDER — avoids low-volume-partition small files.
+- **Tuned Spark session** (`src/common/spark_session.py`): AQE + skew-join +
+  partition coalescing, dynamic partition pruning, auto-broadcast for small
+  dimension joins.
+- **Removed `.count()` anti-patterns:** ingestion/bronze cache their single
+  read so count/write/watermark don't re-execute the source; gold merges rely
+  on Delta's own MERGE metrics; SCD2 uses `isEmpty()` not `count()`.
+- **Weekly maintenance job** (`src/maintenance/table_maintenance.py`):
+  OPTIMIZE, ANALYZE (CBO statistics), VACUUM — config-driven, decoupled from
+  daily ETL.
 
 ## Cost-conscious choices for a small company's scale
 

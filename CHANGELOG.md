@@ -6,6 +6,40 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added — Azure industrialization
+- Three ingestion sources: CSV in ADLS Gen2 (Auto Loader, `bronze_csv_autoloader.py`),
+  PostgreSQL on Docker via ADF Copy over a Self-Hosted IR, and a keyless REST API
+  (FX rates, `rest_api_fx.py`) that normalizes multi-currency revenue to USD in Gold.
+- Azure Data Factory as batch orchestrator: datasets, `pl_ecommerce_batch` pipeline,
+  daily tumbling-window trigger (`adf/`), with linked services/SHIR in Terraform.
+- Terraform IaC in two layers: `foundation/` (RG, ADLS Gen2, Key Vault, Databricks
+  workspace, ADF + SHIR + linked services, Log Analytics, RBAC, UC access connector)
+  and `platform/` (UC storage credential, external locations, catalog/schemas,
+  least-privilege grants, KV-backed secret scope, cost-capped cluster policy).
+  `terraform validate` + `fmt` pass for both layers.
+- Local Postgres source: `docker/` compose + seed schema/data + read-only role.
+- Security/governance: managed-identity data access (no keys), Key Vault secrets,
+  UC column masks + row filters (`sql/governance/unity_catalog_masks.sql`).
+- CI: `terraform.yml` (fmt/validate/plan via OIDC).
+- Docs: `RUNBOOK.md` (trial deploy), `INTERVIEW_PLAYBOOK.md`, `SECURITY_GOVERNANCE.md`,
+  `infra/terraform/README.md`, `adf/README.md`; README rebuilt with architecture diagram.
+- Model: `currency` flows Silver→Gold; `gold.dim_fx_rates` + USD-normalized MV.
+
+### Added — validation & optimization
+- Config-driven data-quality framework (`src/common/data_quality.py`): single-pass
+  row-level + dataset-level checks (not-null, range, allowed-values, regex, unique,
+  min-row-count, freshness, referential integrity) with fail/warn/quarantine modes;
+  rules declared in `config/pipeline_config.yaml`; quarantine side tables in DDL.
+- Optimization layer: tuned Spark session (`src/common/spark_session.py`: AQE,
+  skew join, dynamic partition pruning, auto-broadcast); Delta self-optimizing
+  table properties + liquid clustering on fact tables (`sql/ddl_all_layers.sql`);
+  weekly maintenance job (`src/maintenance/table_maintenance.py`: OPTIMIZE/ANALYZE/VACUUM)
+  wired into the bundle (`resources/maintenance_job.yml`).
+- Removed `.count()` anti-patterns in ingestion/bronze/gold (cache-once, MERGE
+  metrics, `isEmpty()`, broadcast anti-join).
+- Docs: `docs/DATA_QUALITY.md`, `docs/OPTIMIZATION.md`; tests: `tests/test_data_quality.py`.
+- CI: `setup-java` so PySpark tests run.
+
 ### Added
 - Dependency management: `requirements.txt` / `requirements-dev.txt`, `pyproject.toml`.
 - Linting & formatting: Ruff + Black config, `.pre-commit-config.yaml`.

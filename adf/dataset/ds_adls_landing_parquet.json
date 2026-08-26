@@ -1,0 +1,23 @@
+{
+  "name": "ds_adls_landing_parquet",
+  "properties": {
+    "linkedServiceName": { "referenceName": "ls_adls", "type": "LinkedServiceReference" },
+    "type": "Parquet",
+    "parameters": {
+      "entity": { "type": "string" },
+      "run_date": { "type": "string" }
+    },
+    "typeProperties": {
+      "location": {
+        "type": "AzureBlobFSLocation",
+        "fileSystem": "landing",
+        "folderPath": {
+          "value": "@concat(dataset().entity, '/', dataset().run_date)",
+          "type": "Expression"
+        }
+      },
+      "compressionCodec": "snappy"
+    },
+    "annotations": ["landing", "parquet"]
+  }
+}
