@@ -9,9 +9,10 @@ standing up CDC infrastructure (Debezium/Fivetran), unless near-real-time
 order visibility becomes a genuine business requirement.
 """
 
-from pyspark.sql import SparkSession
 from datetime import datetime
-import json
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
 
 RAW_LANDING_PATH = "abfss://raw@storageaccount.dfs.core.windows.net/erp/orders/"
 # For AWS: "s3://raw-bucket/erp/orders/"
@@ -19,11 +20,27 @@ RAW_LANDING_PATH = "abfss://raw@storageaccount.dfs.core.windows.net/erp/orders/"
 WATERMARK_TABLE = "control.ingestion_watermarks"
 
 
+def _validate_watermark(watermark: str) -> str:
+    """Ensures a watermark is a real timestamp before it is interpolated into
+    the JDBC pushdown query. Guards against a malformed/poisoned control-table
+    value turning into SQL injection against the source database."""
+    # Accept the epoch sentinel and any parseable timestamp; reject anything else.
+    if watermark == "1970-01-01 00:00:00":
+        return watermark
+    try:
+        datetime.strptime(watermark, "%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"Refusing to use non-timestamp watermark: {watermark!r}") from exc
+    return watermark
+
+
 def get_last_watermark(spark: SparkSession, source_name: str) -> str:
     """Reads the last successfully processed watermark for a given source."""
+    # Parameterized column comparison (not an f-string predicate) so source_name
+    # can never be interpreted as SQL.
     result = (
         spark.read.table(WATERMARK_TABLE)
-        .filter(f"source_name = '{source_name}'")
+        .filter(col("source_name") == source_name)
         .collect()
     )
     if not result:
@@ -50,7 +67,7 @@ def save_watermark(spark: SparkSession, source_name: str, new_watermark: str):
 
 
 def extract_orders(spark: SparkSession, db_url: str, db_props: dict):
-    last_watermark = get_last_watermark(spark, "orders")
+    last_watermark = _validate_watermark(get_last_watermark(spark, "orders"))
 
     query = f"""
         (SELECT order_id, customer_id, product_id, order_date, amount,

@@ -44,10 +44,52 @@ Marketing Ads API  →   Scheduled batch    →   bronze.ad_spend → silver.ad_
 │   └── governance/       # Unity Catalog setup: grants, masks, row filters
 ├── sql/                  # DDL for all layers + materialized views
 ├── config/               # Pipeline configuration (paths, watermarks, etc.)
-├── workflows/            # Databricks Workflow job definition
+├── resources/            # Databricks Asset Bundle job definition (deployable)
+├── workflows/            # Legacy raw job JSON (reference only)
 ├── docs/                 # Architecture notes, data dictionary
-└── tests/                # Unit tests for dedup / transformation logic
+├── tests/                # Unit tests for dedup / transformation logic
+├── databricks.yml        # Asset Bundle: dev / staging / prod targets
+├── .github/workflows/    # CI (lint + test + bundle validate) and CD (deploy)
+├── pyproject.toml        # Ruff / Black / pytest config + project metadata
+├── Makefile              # make lint | test | validate | deploy-dev
+└── CHANGELOG.md          # Keep a Changelog + SemVer
 ```
+
+## Development
+
+```bash
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+make install     # dev deps + pre-commit hooks
+make lint        # ruff + black --check
+make test        # pytest with coverage
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branching, Conventional Commits, and release steps.
+
+## Code Versioning & Deployment (CI/CD)
+
+Deployment is managed with **Databricks Asset Bundles** (`databricks.yml`) — the
+source in git is the single source of truth for every environment. No job is
+hand-edited in the workspace UI.
+
+| Trigger | Pipeline | Action |
+|---|---|---|
+| Pull request / push to `main` | [`ci.yml`](.github/workflows/ci.yml) | Ruff, Black, pytest+coverage, `bundle validate` |
+| Push to `main` | [`deploy.yml`](.github/workflows/deploy.yml) | Deploy bundle to **staging** |
+| Tag `vX.Y.Z` | [`deploy.yml`](.github/workflows/deploy.yml) | Deploy bundle to **prod** (reviewer-gated) |
+
+Deploy manually to your own sandbox:
+
+```bash
+databricks bundle validate -t dev
+databricks bundle deploy   -t dev
+databricks bundle run ecommerce_lakehouse_pipeline -t dev
+```
+
+Versioning follows [Semantic Versioning](https://semver.org/) — see `VERSION`
+and [CHANGELOG.md](CHANGELOG.md). CI/CD credentials come from GitHub Environment
+secrets (`DATABRICKS_HOST`, `DATABRICKS_TOKEN`); pipeline data secrets come from a
+Databricks secret scope. Neither is ever committed.
 
 ## Pipeline Flow
 

@@ -1,0 +1,11 @@
+# Normalize line endings: repo stores LF, checked out native on Windows.
+* text=auto eol=lf
+
+# Files that MUST stay LF regardless of platform (parsed by Linux CI / Spark).
+*.py    text eol=lf
+*.sh    text eol=lf
+*.sql   text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.json  text eol=lf
+Makefile text eol=lf

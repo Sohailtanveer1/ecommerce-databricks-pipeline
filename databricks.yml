@@ -1,0 +1,55 @@
+# Databricks Asset Bundle (DAB) — the deployable, version-controlled definition
+# of this pipeline. Replaces hand-applying the raw job JSON: the same source in
+# git deploys reproducibly to dev / staging / prod.
+#
+#   databricks bundle validate -t dev
+#   databricks bundle deploy   -t dev
+#   databricks bundle run ecommerce_lakehouse_pipeline -t dev
+#
+# Auth comes from the DATABRICKS_HOST / DATABRICKS_TOKEN env vars (or a CLI
+# profile) — never from committed credentials.
+bundle:
+  name: ecommerce-lakehouse-pipeline
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog name for the target environment.
+    default: lakehouse_catalog
+  notifications_email:
+    description: Address that receives job-failure alerts.
+    default: data-team@company.com
+  sql_warehouse_id:
+    description: SQL Warehouse used to refresh materialized views.
+    default: ""
+
+targets:
+  # Personal sandbox. `mode: development` prefixes resources with the user name
+  # and pauses schedules so dev deploys never collide or fire on a timer.
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://adb-dev.azuredatabricks.net
+    variables:
+      catalog: lakehouse_catalog_dev
+
+  staging:
+    mode: production
+    workspace:
+      host: https://adb-staging.azuredatabricks.net
+      root_path: /Shared/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: lakehouse_catalog_staging
+
+  prod:
+    mode: production
+    workspace:
+      host: https://adb-prod.azuredatabricks.net
+      root_path: /Shared/.bundle/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: etl-service-principal
+    variables:
+      catalog: lakehouse_catalog

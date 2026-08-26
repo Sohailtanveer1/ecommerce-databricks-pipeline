@@ -1,4 +1,5 @@
 {
+  "_comment": "REFERENCE ONLY. The deployable source of truth is the Databricks Asset Bundle: databricks.yml + resources/ecommerce_pipeline_job.yml. Deploy with `databricks bundle deploy -t <target>`, not by importing this JSON.",
   "name": "ecommerce_lakehouse_pipeline",
   "tasks": [
     {

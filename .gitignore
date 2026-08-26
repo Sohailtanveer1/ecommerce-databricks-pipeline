@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.Python
+.venv/
+venv/
+env/
+ENV/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+
+# Databricks
+.databricks/
+.databricks-login.json
+*.dbc
+
+# Spark / local run artifacts
+spark-warehouse/
+metastore_db/
+derby.log
+*.crc
+_SUCCESS
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Secrets — never commit credentials (they live in a secret scope)
+.env
+*.pem
+*.key
+secrets.*

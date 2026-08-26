@@ -33,7 +33,6 @@ def clean_and_dedup(bronze_batch_df: DataFrame) -> DataFrame:
         .filter(col("order_id").isNotNull())
         .filter(col("order_date").isNotNull())
         .withColumn("order_date", col("order_date").cast("date"))
-        .withColumnRenamed("cust_id", "customer_id")
         .withColumn("processed_timestamp", current_timestamp())
     )
 
