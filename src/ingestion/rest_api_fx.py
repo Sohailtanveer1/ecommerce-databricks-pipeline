@@ -46,7 +46,10 @@ def fetch_rates(run_date: str) -> dict:
     import urllib.request
 
     url = f"{API_URL.format(run_date=run_date)}?from={BASE_CURRENCY}&to={','.join(SYMBOLS)}"
-    with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310 - fixed trusted host
+    # The API's CDN returns 403 to requests without a User-Agent, so set one
+    # explicitly (urllib/Databricks send none by default).
+    req = urllib.request.Request(url, headers={"User-Agent": "ecommerce-pipeline/1.0"})
+    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 - fixed trusted host
         payload = json.loads(resp.read().decode("utf-8"))
     if "rates" not in payload:
         raise ValueError(f"Unexpected FX API response for {run_date}: {payload}")
