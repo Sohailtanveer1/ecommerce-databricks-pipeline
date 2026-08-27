@@ -45,6 +45,8 @@ _SUCCESS
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
+*.tfplan
+*.tfplan.*
 crash.log
 crash.*.log
 override.tf
@@ -55,6 +57,15 @@ terraform.rc
 
 # Secrets — never commit credentials (they live in Key Vault / a secret scope)
 .env
+.env.*
 *.pem
 *.key
+*.pfx
+*.p12
 secrets.*
+.databrickscfg
+azure.auth
+*.publishsettings
+sas_token*
+*_rsa
+id_rsa*
