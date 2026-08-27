@@ -55,3 +55,17 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+# --- Tunables used by the change-management exercise (docs/TERRAFORM_CHANGE_EXERCISE.md) ---
+
+variable "log_retention_days" {
+  description = "Log Analytics retention. Changing this is an UPDATE-IN-PLACE — the demo change."
+  type        = number
+  default     = 30
+}
+
+variable "extra_containers" {
+  description = "Additional ADLS containers to create beyond the medallion set. Adding one is an ADD (new resource), not a replacement — the second demo change."
+  type        = list(string)
+  default     = []
+}

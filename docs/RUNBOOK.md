@@ -135,6 +135,12 @@ SELECT * FROM ecommerce_dev.silver.orders_quarantine;   -- DQ rejects, if any
 SELECT * FROM ecommerce_dev.gold.mv_revenue_usd_by_category_month;
 ```
 
+## 10b. (Optional) Practice a Terraform change
+
+Run the change-management exercise in **[TERRAFORM_CHANGE_EXERCISE.md](TERRAFORM_CHANGE_EXERCISE.md)**
+— bump `log_retention_days` (update-in-place) or add a container, review the plan,
+apply, verify, roll back. Great to have done before an interview.
+
 ## 11. Teardown (stop all cost)
 
 ```bash

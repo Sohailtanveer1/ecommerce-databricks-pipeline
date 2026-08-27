@@ -136,6 +136,14 @@ One parameterized root + `dev.tfvars`; prod is a `prod.tfvars` + a separate stat
 no code fork. I kept it dev-only to stay in trial limits while showing the
 promotion path.
 
+**Q: How do you change a live resource safely?**
+Change a variable in `tfvars` (not the resource block), open a PR, CI runs
+`terraform plan`, a human reads the diff, `apply` runs on merge. I always
+`plan -out` then `apply` that saved plan. I distinguish **update-in-place** (`~`)
+from **replacement** (`-/+ ... forces replacement`) — the latter is a stop-and-
+think on any stateful resource. Full worked example (retention change, adding a
+container, handling a replacement, rollback): `docs/TERRAFORM_CHANGE_EXERCISE.md`.
+
 ## CI/CD
 
 **Q: Describe the pipelines.**

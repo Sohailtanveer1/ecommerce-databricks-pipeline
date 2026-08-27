@@ -22,7 +22,12 @@ locals {
   }, var.tags)
 
   # ADLS Gen2 containers (filesystems) that back the medallion + control planes.
-  containers = ["landing", "bronze", "silver", "gold", "quarantine", "checkpoints"]
+  # `extra_containers` lets the change-exercise add one via tfvars (an ADD, not a
+  # replacement) — see docs/TERRAFORM_CHANGE_EXERCISE.md.
+  containers = distinct(concat(
+    ["landing", "bronze", "silver", "gold", "quarantine", "checkpoints"],
+    var.extra_containers,
+  ))
 }
 
 resource "azurerm_resource_group" "rg" {

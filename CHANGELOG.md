@@ -22,7 +22,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   UC column masks + row filters (`sql/governance/unity_catalog_masks.sql`).
 - CI: `terraform.yml` (fmt/validate/plan via OIDC).
 - Docs: `RUNBOOK.md` (trial deploy), `INTERVIEW_PLAYBOOK.md`, `SECURITY_GOVERNANCE.md`,
+  `TERRAFORM_CHANGE_EXERCISE.md` (update-in-place vs add vs replacement walkthrough),
   `infra/terraform/README.md`, `adf/README.md`; README rebuilt with architecture diagram.
+- Terraform tunables (`log_retention_days`, `extra_containers`) so a routine change
+  is a one-line tfvars edit for the change-management exercise.
 - Model: `currency` flows Silver→Gold; `gold.dim_fx_rates` + USD-normalized MV.
 
 ### Added — validation & optimization

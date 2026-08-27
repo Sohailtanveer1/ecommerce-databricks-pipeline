@@ -13,3 +13,9 @@ postgres_password = "change-me-strong-password"
 
 # Blank if you pick a keyless REST API (e.g. exchangerate.host / Frankfurter).
 fx_api_key = ""
+
+# Change-management exercise (docs/TERRAFORM_CHANGE_EXERCISE.md):
+#   * bump log_retention_days 30 -> 60  => update-in-place
+#   * add "sandbox" to extra_containers => add a new resource
+log_retention_days = 30
+extra_containers   = []
