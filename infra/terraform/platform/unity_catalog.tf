@@ -34,15 +34,17 @@ resource "databricks_external_location" "loc" {
 }
 
 resource "databricks_catalog" "this" {
-  name         = var.catalog_name
-  comment      = "E-commerce lakehouse (${var.environment})."
-  storage_root = local.abfss["bronze"] # managed-table root; external paths still used per layer
-  depends_on   = [databricks_external_location.loc]
+  name          = var.catalog_name
+  comment       = "E-commerce lakehouse (${var.environment})."
+  storage_root  = local.abfss["bronze"] # managed-table root; external paths still used per layer
+  force_destroy = true                   # dev: allow destroy even with tables present
+  depends_on    = [databricks_external_location.loc]
 }
 
 resource "databricks_schema" "layers" {
-  for_each     = toset(["bronze", "silver", "gold", "governance", "control"])
-  catalog_name = databricks_catalog.this.name
-  name         = each.value
-  comment      = "${each.value} layer."
+  for_each      = toset(["bronze", "silver", "gold", "governance", "control"])
+  catalog_name  = databricks_catalog.this.name
+  name          = each.value
+  comment       = "${each.value} layer."
+  force_destroy = true
 }
