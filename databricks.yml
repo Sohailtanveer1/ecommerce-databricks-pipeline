@@ -32,9 +32,9 @@ targets:
     mode: development
     default: true
     workspace:
-      host: https://adb-dev.azuredatabricks.net
+      host: https://adb-7405616988883616.16.azuredatabricks.net
     variables:
-      catalog: lakehouse_catalog_dev
+      catalog: ecommerce_dev
 
   staging:
     mode: production

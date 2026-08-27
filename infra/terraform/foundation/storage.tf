@@ -16,7 +16,8 @@ resource "azurerm_storage_account" "adls" {
     delete_retention_policy {
       days = 7
     }
-    versioning_enabled = true
+    # Note: blob versioning is NOT supported on ADLS Gen2 (hierarchical
+    # namespace); soft-delete above is. HNS provides its own protection.
   }
 
   tags = local.common_tags

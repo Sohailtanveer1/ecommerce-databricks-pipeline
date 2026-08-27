@@ -26,6 +26,18 @@ resource "azurerm_role_assignment" "kv_reader_adf" {
   principal_id         = azurerm_data_factory.adf.identity[0].principal_id
 }
 
+# The AzureDatabricks first-party app (fixed app id across all tenants) — needed
+# so a Key Vault-backed Databricks secret scope can read secrets from this vault.
+data "azuread_service_principal" "databricks" {
+  client_id = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d"
+}
+
+resource "azurerm_role_assignment" "kv_reader_databricks" {
+  scope                = azurerm_key_vault.kv.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = data.azuread_service_principal.databricks.object_id
+}
+
 resource "azurerm_key_vault_secret" "pg_user" {
   name         = "postgres-username"
   value        = var.postgres_username
