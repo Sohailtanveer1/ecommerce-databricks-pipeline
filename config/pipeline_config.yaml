@@ -61,12 +61,6 @@ data_quality:
     regex:
       email: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
 
-  clickstream_events:
-    on_failure: warn
-    not_null: [event_id, event_type, event_timestamp]
-    allowed_values:
-      event_type: [page_view, add_to_cart, checkout, purchase, remove_from_cart]
-
 scd2_tracked_attributes:
   dim_product: [category, product_name]
   dim_customer: [customer_segment, region]
@@ -87,9 +81,6 @@ optimization:
     gold.fact_orders:
       cluster_by: [order_date, customer_id]
       analyze_columns: [customer_id, product_id, order_date]
-    gold.fact_clickstream:
-      cluster_by: [event_timestamp, customer_id]
-      analyze_columns: [customer_id, event_type]
     silver.orders:
       cluster_by: [order_id]
     gold.dim_product:

@@ -1,17 +1,9 @@
 -- ============================================================
--- Delta table DDL for all layers.
+-- Delta table DDL for all layers (Unity Catalog: run under `USE CATALOG ecommerce_dev`).
 --
--- Every table sets self-optimizing properties so ordinary writes stay healthy
--- between the weekly OPTIMIZE/VACUUM maintenance job:
---   * autoOptimize.optimizeWrite  -> compact small files at write time
---   * autoOptimize.autoCompact    -> background compaction of tiny files
---   * tuneFileSizesForRewrites    -> right-size files for MERGE-heavy tables
---   * enableDeletionVectors       -> MERGE/UPDATE/DELETE rewrite fewer files
---   * enableChangeDataFeed        -> only where a downstream stream reads changes
---
--- Fact tables use LIQUID CLUSTERING (CLUSTER BY) instead of static partitioning
--- + a separate ZORDER: it avoids small-file skew from low-volume date
--- partitions and lets the clustering keys evolve without a rewrite.
+-- Sources: orders + customers (Postgres/JDBC), marketing ad spend (CSV in ADLS),
+-- fx rates (REST API). Self-optimizing table properties on every table; fact
+-- tables use liquid clustering (CLUSTER BY) instead of static partitioning.
 -- ============================================================
 
 
@@ -23,31 +15,22 @@ CREATE TABLE IF NOT EXISTS bronze.orders (
     order_id STRING,
     customer_id STRING,
     product_id STRING,
-    order_date STRING,      -- kept as raw string in Bronze; cast happens in Silver
+    quantity INT,
+    unit_price DOUBLE,
+    discount DOUBLE,
     amount DOUBLE,
-    currency STRING,        -- multi-currency; normalized to USD in Gold via fx_rates
+    currency STRING,
+    payment_method STRING,
+    order_channel STRING,
     order_status STRING,
+    order_date STRING,          -- raw string in Bronze; cast to DATE in Silver
+    shipping_country STRING,
     updated_at TIMESTAMP,
     source_file_path STRING,
     ingestion_timestamp TIMESTAMP
 ) USING DELTA
 TBLPROPERTIES (
     delta.enableChangeDataFeed = true,
-    delta.autoOptimize.optimizeWrite = true,
-    delta.autoOptimize.autoCompact = true,
-    delta.enableDeletionVectors = true
-);
-
-CREATE TABLE IF NOT EXISTS bronze.clickstream_events (
-    event_id STRING,
-    customer_id STRING,
-    event_type STRING,       -- page_view, add_to_cart, checkout, etc.
-    product_id STRING,
-    event_timestamp TIMESTAMP,
-    source_file_path STRING,
-    ingestion_timestamp TIMESTAMP
-) USING DELTA
-TBLPROPERTIES (
     delta.autoOptimize.optimizeWrite = true,
     delta.autoOptimize.autoCompact = true,
     delta.enableDeletionVectors = true
@@ -55,10 +38,17 @@ TBLPROPERTIES (
 
 CREATE TABLE IF NOT EXISTS bronze.customers (
     customer_id STRING,
-    name STRING,
+    first_name STRING,
+    last_name STRING,
     email STRING,
     phone STRING,
+    country STRING,
+    city STRING,
     region STRING,
+    customer_segment STRING,
+    loyalty_tier STRING,
+    signup_date STRING,
+    marketing_opt_in BOOLEAN,
     updated_at TIMESTAMP,
     ingestion_timestamp TIMESTAMP
 ) USING DELTA
@@ -69,8 +59,7 @@ TBLPROPERTIES (
     delta.enableDeletionVectors = true
 );
 
--- Source #3 (REST API): daily FX rates, base USD. Powers currency-normalized
--- revenue in Gold.
+-- Source #3 (REST API): daily FX rates, base USD. Powers USD-normalized revenue.
 CREATE TABLE IF NOT EXISTS bronze.fx_rates (
     as_of_date DATE,
     base_currency STRING,
@@ -84,7 +73,7 @@ TBLPROPERTIES (
     delta.autoOptimize.autoCompact = true
 );
 
--- Source #1 (CSV in ADLS): marketing ad spend, ingested via Auto Loader.
+-- Source #1 (CSV in ADLS): marketing ad spend, ingested via Auto Loader / COPY INTO.
 CREATE TABLE IF NOT EXISTS bronze.marketing_ad_spend (
     spend_date STRING,
     channel STRING,
@@ -112,10 +101,16 @@ CREATE TABLE IF NOT EXISTS silver.orders (
     order_id STRING NOT NULL,
     customer_id STRING NOT NULL,
     product_id STRING,
-    order_date DATE NOT NULL,
+    quantity INT,
+    unit_price DOUBLE,
+    discount DOUBLE,
     amount DOUBLE,
     currency STRING,
+    payment_method STRING,
+    order_channel STRING,
     order_status STRING,
+    order_date DATE NOT NULL,
+    shipping_country STRING,
     updated_at TIMESTAMP,
     processed_timestamp TIMESTAMP
 ) USING DELTA
@@ -129,10 +124,17 @@ TBLPROPERTIES (
 
 CREATE TABLE IF NOT EXISTS silver.customers (
     customer_id STRING NOT NULL,
-    name STRING,
+    first_name STRING,
+    last_name STRING,
     email STRING,
     phone STRING,
+    country STRING,
+    city STRING,
     region STRING,
+    customer_segment STRING,
+    loyalty_tier STRING,
+    signup_date DATE,
+    marketing_opt_in BOOLEAN,
     updated_at TIMESTAMP,
     processed_timestamp TIMESTAMP
 ) USING DELTA
@@ -144,33 +146,23 @@ TBLPROPERTIES (
     delta.enableDeletionVectors = true
 );
 
--- Side tables for rows that fail Silver data-quality checks (quarantine mode).
+-- Quarantine side tables (rows failing Silver data-quality checks).
 CREATE TABLE IF NOT EXISTS silver.orders_quarantine (
-    order_id STRING,
-    customer_id STRING,
-    product_id STRING,
-    order_date DATE,
-    amount DOUBLE,
-    order_status STRING,
-    updated_at TIMESTAMP,
+    order_id STRING, customer_id STRING, product_id STRING, quantity INT,
+    unit_price DOUBLE, discount DOUBLE, amount DOUBLE, currency STRING,
+    payment_method STRING, order_channel STRING, order_status STRING,
+    order_date DATE, shipping_country STRING, updated_at TIMESTAMP,
     processed_timestamp TIMESTAMP,
-    _dq_errors ARRAY<STRING>,
-    _dq_dataset STRING,
-    _dq_ts TIMESTAMP
+    _dq_errors ARRAY<STRING>, _dq_dataset STRING, _dq_ts TIMESTAMP
 ) USING DELTA
 TBLPROPERTIES (delta.autoOptimize.optimizeWrite = true);
 
 CREATE TABLE IF NOT EXISTS silver.customers_quarantine (
-    customer_id STRING,
-    name STRING,
-    email STRING,
-    phone STRING,
-    region STRING,
-    updated_at TIMESTAMP,
-    processed_timestamp TIMESTAMP,
-    _dq_errors ARRAY<STRING>,
-    _dq_dataset STRING,
-    _dq_ts TIMESTAMP
+    customer_id STRING, first_name STRING, last_name STRING, email STRING,
+    phone STRING, country STRING, city STRING, region STRING,
+    customer_segment STRING, loyalty_tier STRING, signup_date DATE,
+    marketing_opt_in BOOLEAN, updated_at TIMESTAMP, processed_timestamp TIMESTAMP,
+    _dq_errors ARRAY<STRING>, _dq_dataset STRING, _dq_ts TIMESTAMP
 ) USING DELTA
 TBLPROPERTIES (delta.autoOptimize.optimizeWrite = true);
 
@@ -183,6 +175,9 @@ CREATE TABLE IF NOT EXISTS gold.dim_product (
     product_id STRING NOT NULL,
     product_name STRING,
     category STRING,
+    subcategory STRING,
+    brand STRING,
+    unit_cost DOUBLE,
     effective_start_date DATE NOT NULL,
     effective_end_date DATE,          -- NULL = currently active version
     is_current BOOLEAN NOT NULL
@@ -196,9 +191,13 @@ TBLPROPERTIES (
 
 CREATE TABLE IF NOT EXISTS gold.dim_customer (
     customer_id STRING NOT NULL,
-    name STRING,
+    first_name STRING,
+    last_name STRING,
+    country STRING,
+    city STRING,
     region STRING,
     customer_segment STRING,
+    loyalty_tier STRING,
     effective_start_date DATE NOT NULL,
     effective_end_date DATE,
     is_current BOOLEAN NOT NULL
@@ -215,10 +214,16 @@ CREATE TABLE IF NOT EXISTS gold.fact_orders (
     customer_id STRING NOT NULL,
     product_id STRING,
     order_date DATE NOT NULL,
+    quantity INT,
+    unit_price DOUBLE,
+    discount DOUBLE,
     amount DOUBLE,
     currency STRING,
+    payment_method STRING,
+    order_channel STRING,
     order_status STRING,
-    region STRING
+    region STRING,
+    shipping_country STRING
 ) USING DELTA
 CLUSTER BY (order_date, customer_id)
 TBLPROPERTIES (
@@ -239,18 +244,4 @@ CLUSTER BY (as_of_date)
 TBLPROPERTIES (
     delta.autoOptimize.optimizeWrite = true,
     delta.autoOptimize.autoCompact = true
-);
-
-CREATE TABLE IF NOT EXISTS gold.fact_clickstream (
-    event_id STRING NOT NULL,
-    customer_id STRING,
-    event_type STRING,
-    product_id STRING,
-    event_timestamp TIMESTAMP
-) USING DELTA
-CLUSTER BY (event_timestamp, customer_id)
-TBLPROPERTIES (
-    delta.autoOptimize.optimizeWrite = true,
-    delta.autoOptimize.autoCompact = true,
-    delta.enableDeletionVectors = true
 );

@@ -49,11 +49,14 @@ resource "azurerm_data_factory_linked_service_azure_databricks" "dbx" {
   adb_domain                 = "https://${azurerm_databricks_workspace.dbw.workspace_url}"
   msi_work_space_resource_id = azurerm_databricks_workspace.dbw.id
 
+  # Trial-friendly: a single worker (smallest footprint the typed resource allows).
+  # On a free trial prefer serverless SQL for transforms; ADF-triggered Spark
+  # clusters need more vCPU quota than the trial usually grants.
   new_cluster_config {
     node_type             = "Standard_DS3_v2"
     cluster_version       = "14.3.x-scala2.12"
     min_number_of_workers = 1
-    max_number_of_workers = 2
+    max_number_of_workers = 1
     driver_node_type      = "Standard_DS3_v2"
 
     custom_tags = local.common_tags

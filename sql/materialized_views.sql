@@ -52,14 +52,3 @@ LEFT JOIN gold.dim_fx_rates fx
     ON fx.quote_currency = f.currency
     AND fx.as_of_date = f.order_date
 GROUP BY d.category, DATE_TRUNC('month', f.order_date);
-
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS gold.mv_cart_funnel_daily
-AS
-SELECT
-    DATE(event_timestamp) AS event_date,
-    event_type,
-    COUNT(DISTINCT customer_id) AS unique_users,
-    COUNT(*) AS event_count
-FROM gold.fact_clickstream
-GROUP BY DATE(event_timestamp), event_type;

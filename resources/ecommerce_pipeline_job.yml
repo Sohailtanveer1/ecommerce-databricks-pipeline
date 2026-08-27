@@ -22,9 +22,15 @@ resources:
           new_cluster:
             spark_version: 14.3.x-scala2.12
             node_type_id: Standard_DS3_v2
-            autoscale:
-              min_workers: 1
-              max_workers: 4
+            num_workers: 0 # single-node (driver only) — trial-friendly
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: "local[*]"
+            custom_tags:
+              ResourceClass: SingleNode
+            azure_attributes:
+              availability: SPOT_WITH_FALLBACK_AZURE
+              first_on_demand: 0
 
       tasks:
         - task_key: ingest_orders_batch
