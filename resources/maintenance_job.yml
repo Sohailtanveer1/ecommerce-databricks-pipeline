@@ -1,0 +1,37 @@
+# Weekly table-maintenance job: OPTIMIZE (+ liquid clustering / ZORDER),
+# ANALYZE statistics, and VACUUM. Kept separate from the daily ETL job so
+# compaction never blocks ingestion, and scheduled weekly to match the data
+# volume actually written at this scale.
+resources:
+  jobs:
+    ecommerce_table_maintenance:
+      name: ecommerce_table_maintenance
+
+      schedule:
+        quartz_cron_expression: "0 0 4 ? * SUN"   # Sundays 04:00
+        timezone_id: UTC
+
+      email_notifications:
+        on_failure:
+          - ${var.notifications_email}
+
+      job_clusters:
+        - job_cluster_key: maintenance_cluster
+          new_cluster:
+            spark_version: 14.3.x-scala2.12
+            node_type_id: Standard_DS3_v2
+            num_workers: 0 # single-node — trial-friendly
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: "local[*]"
+            custom_tags:
+              ResourceClass: SingleNode
+            azure_attributes:
+              availability: SPOT_WITH_FALLBACK_AZURE
+              first_on_demand: 0
+
+      tasks:
+        - task_key: optimize_and_vacuum
+          job_cluster_key: maintenance_cluster
+          spark_python_task:
+            python_file: ../src/maintenance/table_maintenance.py

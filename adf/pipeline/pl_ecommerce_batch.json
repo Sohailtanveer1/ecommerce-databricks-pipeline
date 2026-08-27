@@ -1,0 +1,97 @@
+{
+  "name": "pl_ecommerce_batch",
+  "properties": {
+    "description": "Daily batch: copy JDBC + land sources, then trigger Databricks medallion (Bronze->Silver->Gold). Incremental via tumbling-window bounds (no watermark table needed).",
+    "parameters": {
+      "windowStart": { "type": "string", "defaultValue": "2026-01-01T00:00:00Z" },
+      "windowEnd": { "type": "string", "defaultValue": "2026-12-31T00:00:00Z" },
+      "run_date": { "type": "string", "defaultValue": "2026-08-27" }
+    },
+    "activities": [
+      {
+        "name": "Copy_Orders_ToLanding",
+        "type": "Copy",
+        "policy": { "timeout": "0.01:00:00", "retry": 2, "retryIntervalInSeconds": 30 },
+        "typeProperties": {
+          "source": {
+            "type": "PostgreSqlV2Source",
+            "query": {
+              "value": "SELECT order_id, customer_id, product_id, order_date, amount, currency, order_status, updated_at FROM public.orders WHERE updated_at >= '@{pipeline().parameters.windowStart}' AND updated_at < '@{pipeline().parameters.windowEnd}'",
+              "type": "Expression"
+            }
+          },
+          "sink": { "type": "ParquetSink", "storeSettings": { "type": "AzureBlobFSWriteSettings" } }
+        },
+        "inputs": [{ "referenceName": "ds_pg_orders", "type": "DatasetReference" }],
+        "outputs": [
+          {
+            "referenceName": "ds_adls_landing_parquet",
+            "type": "DatasetReference",
+            "parameters": { "entity": "orders", "run_date": "@pipeline().parameters.run_date" }
+          }
+        ]
+      },
+      {
+        "name": "Ingest_FX_API",
+        "type": "DatabricksSparkPython",
+        "dependsOn": [],
+        "policy": { "timeout": "0.00:30:00", "retry": 1 },
+        "typeProperties": {
+          "pythonFile": "/Workspace/Repos/ecommerce/src/ingestion/rest_api_fx.py",
+          "parameters": ["@pipeline().parameters.run_date"]
+        },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" }
+      },
+      {
+        "name": "Bronze_Orders",
+        "type": "DatabricksSparkPython",
+        "dependsOn": [{ "activity": "Copy_Orders_ToLanding", "dependencyConditions": ["Succeeded"] }],
+        "typeProperties": {
+          "pythonFile": "/Workspace/Repos/ecommerce/src/bronze/bronze_loader.py",
+          "parameters": ["@pipeline().parameters.run_date"]
+        },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" }
+      },
+      {
+        "name": "Bronze_CSV_Marketing",
+        "type": "DatabricksSparkPython",
+        "dependsOn": [],
+        "typeProperties": {
+          "pythonFile": "/Workspace/Repos/ecommerce/src/bronze/bronze_csv_autoloader.py"
+        },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" }
+      },
+      {
+        "name": "Silver_Orders",
+        "type": "DatabricksSparkPython",
+        "dependsOn": [{ "activity": "Bronze_Orders", "dependencyConditions": ["Succeeded"] }],
+        "typeProperties": {
+          "pythonFile": "/Workspace/Repos/ecommerce/src/silver/silver_transform_orders.py"
+        },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" }
+      },
+      {
+        "name": "Gold_Dim_Product",
+        "type": "DatabricksSparkPython",
+        "dependsOn": [{ "activity": "Silver_Orders", "dependencyConditions": ["Succeeded"] }],
+        "typeProperties": {
+          "pythonFile": "/Workspace/Repos/ecommerce/src/gold/gold_dim_product_scd2.py"
+        },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" }
+      },
+      {
+        "name": "Gold_Fact_Orders",
+        "type": "DatabricksSparkPython",
+        "dependsOn": [
+          { "activity": "Gold_Dim_Product", "dependencyConditions": ["Succeeded"] },
+          { "activity": "Ingest_FX_API", "dependencyConditions": ["Succeeded"] }
+        ],
+        "typeProperties": {
+          "pythonFile": "/Workspace/Repos/ecommerce/src/gold/gold_fact_orders.py"
+        },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" }
+      }
+    ],
+    "annotations": ["batch", "medallion", "daily"]
+  }
+}

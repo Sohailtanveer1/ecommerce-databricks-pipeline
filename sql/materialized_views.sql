@@ -35,12 +35,20 @@ FROM gold.fact_orders f
 GROUP BY f.region, DATE_TRUNC('month', f.order_date);
 
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS gold.mv_cart_funnel_daily
+-- USD-normalized revenue: joins each order to the FX rate for its currency on
+-- the order date, so multi-currency orders (USD/EUR/GBP) roll up to one
+-- comparable reporting number. This is why the REST FX source exists.
+CREATE MATERIALIZED VIEW IF NOT EXISTS gold.mv_revenue_usd_by_category_month
 AS
 SELECT
-    DATE(event_timestamp) AS event_date,
-    event_type,
-    COUNT(DISTINCT customer_id) AS unique_users,
-    COUNT(*) AS event_count
-FROM gold.fact_clickstream
-GROUP BY DATE(event_timestamp), event_type;
+    d.category,
+    DATE_TRUNC('month', f.order_date) AS month,
+    SUM(f.amount / fx.rate) AS total_revenue_usd
+FROM gold.fact_orders f
+JOIN gold.dim_product d
+    ON f.product_id = d.product_id
+    AND f.order_date BETWEEN d.effective_start_date AND COALESCE(d.effective_end_date, current_date())
+LEFT JOIN gold.dim_fx_rates fx
+    ON fx.quote_currency = f.currency
+    AND fx.as_of_date = f.order_date
+GROUP BY d.category, DATE_TRUNC('month', f.order_date);

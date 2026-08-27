@@ -1,0 +1,8 @@
+# Runtime dependencies.
+#
+# On Databricks, pyspark / delta-spark are provided by the Databricks Runtime
+# and are NOT installed from here — they are pinned only so local runs and CI
+# match the cluster's Databricks Runtime 14.3 LTS (Spark 3.5.x, Delta 3.1.x).
+pyspark==3.5.0
+delta-spark==3.1.0
+PyYAML==6.0.1

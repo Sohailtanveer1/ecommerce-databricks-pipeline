@@ -1,0 +1,54 @@
+name: Terraform
+
+# fmt + validate + plan on every PR; apply on push to main (manual-gated via the
+# `azure-prod`/`azure-dev` environment). Auth uses OIDC federated credentials —
+# no long-lived cloud secret is stored in GitHub.
+on:
+  pull_request:
+    paths: ["infra/terraform/**", ".github/workflows/terraform.yml"]
+  push:
+    branches: [main]
+    paths: ["infra/terraform/**"]
+
+permissions:
+  id-token: write   # OIDC
+  contents: read
+
+jobs:
+  fmt-validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        layer: [foundation, platform]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+      - name: fmt
+        run: terraform -chdir=infra/terraform/${{ matrix.layer }} fmt -check
+      - name: init (no backend)
+        run: terraform -chdir=infra/terraform/${{ matrix.layer }} init -backend=false
+      - name: validate
+        run: terraform -chdir=infra/terraform/${{ matrix.layer }} validate
+
+  plan:
+    needs: fmt-validate
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    environment: azure-dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+      - name: plan foundation
+        working-directory: infra/terraform/foundation
+        run: |
+          terraform init
+          terraform plan -var-file=dev.tfvars -input=false

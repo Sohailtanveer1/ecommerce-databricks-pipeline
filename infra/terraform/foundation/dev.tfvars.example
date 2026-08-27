@@ -1,0 +1,21 @@
+# Copy to dev.tfvars and fill in. dev.tfvars is gitignored (contains secrets).
+project     = "ecomlake"
+environment = "dev"
+location    = "eastus" # a region your trial has quota in
+
+# az ad signed-in-user show --query id -o tsv
+my_object_id = "00000000-0000-0000-0000-000000000000"
+
+# The SHIR runs on the Docker host, so it reaches the published port at localhost.
+postgres_jdbc_url = "jdbc:postgresql://localhost:5432/ecommerce"
+postgres_username = "ecom_reader"
+postgres_password = "change-me-strong-password"
+
+# Blank if you pick a keyless REST API (e.g. exchangerate.host / Frankfurter).
+fx_api_key = ""
+
+# Change-management exercise (docs/TERRAFORM_CHANGE_EXERCISE.md):
+#   * bump log_retention_days 30 -> 60  => update-in-place
+#   * add "sandbox" to extra_containers => add a new resource
+log_retention_days = 30
+extra_containers   = []

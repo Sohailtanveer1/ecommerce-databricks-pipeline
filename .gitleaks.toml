@@ -1,0 +1,20 @@
+# gitleaks config — extends the default rules with an allowlist for known-safe
+# placeholders and public constants, so CI doesn't fail on non-secrets.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known-safe placeholders and public identifiers"
+regexes = [
+  # Documentation/seed placeholders, not real credentials
+  '''change-me-strong-password''',
+  '''change-me''',
+  '''YOUR_STRONG_PASSWORD''',
+  '''postgres:postgres''',
+  # AzureDatabricks first-party application id — a public constant, same in every tenant
+  '''2ff814a6-3304-4ab8-85cb-cd0e6f879c1d''',
+]
+paths = [
+  '''.*\.example$''',
+  '''docs/.*''',
+]

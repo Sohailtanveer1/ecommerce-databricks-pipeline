@@ -1,0 +1,81 @@
+# Job definition for the Bronze -> Silver -> Gold -> Serve DAG.
+#
+# This is the DAB-native equivalent of workflows/databricks_workflow.json (kept
+# for reference only). Paths are relative to the bundle root and synced into the
+# workspace on `bundle deploy`, so there is no hard-coded /Repos path to drift.
+resources:
+  jobs:
+    ecommerce_lakehouse_pipeline:
+      name: ecommerce_lakehouse_pipeline
+
+      schedule:
+        quartz_cron_expression: "0 0 3 * * ?"
+        timezone_id: UTC
+        # In `dev` (mode: development) DAB pauses this automatically.
+
+      email_notifications:
+        on_failure:
+          - ${var.notifications_email}
+
+      job_clusters:
+        - job_cluster_key: small_job_cluster
+          new_cluster:
+            spark_version: 14.3.x-scala2.12
+            node_type_id: Standard_DS3_v2
+            num_workers: 0 # single-node (driver only) — trial-friendly
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: "local[*]"
+            custom_tags:
+              ResourceClass: SingleNode
+            azure_attributes:
+              availability: SPOT_WITH_FALLBACK_AZURE
+              first_on_demand: 0
+
+      tasks:
+        - task_key: ingest_orders_batch
+          job_cluster_key: small_job_cluster
+          spark_python_task:
+            python_file: ../src/ingestion/batch_extract_orders.py
+
+        - task_key: ingest_clickstream_autoloader
+          job_cluster_key: small_job_cluster
+          spark_python_task:
+            python_file: ../src/ingestion/autoloader_clickstream.py
+
+        - task_key: load_bronze
+          depends_on:
+            - task_key: ingest_orders_batch
+            - task_key: ingest_clickstream_autoloader
+          job_cluster_key: small_job_cluster
+          spark_python_task:
+            python_file: ../src/bronze/bronze_loader.py
+
+        - task_key: transform_silver
+          depends_on:
+            - task_key: load_bronze
+          job_cluster_key: small_job_cluster
+          spark_python_task:
+            python_file: ../src/silver/silver_transform_orders.py
+
+        - task_key: merge_gold_dim_product
+          depends_on:
+            - task_key: transform_silver
+          job_cluster_key: small_job_cluster
+          spark_python_task:
+            python_file: ../src/gold/gold_dim_product_scd2.py
+
+        - task_key: merge_gold_fact_orders
+          depends_on:
+            - task_key: merge_gold_dim_product
+          job_cluster_key: small_job_cluster
+          spark_python_task:
+            python_file: ../src/gold/gold_fact_orders.py
+
+        - task_key: refresh_materialized_views
+          depends_on:
+            - task_key: merge_gold_fact_orders
+          sql_task:
+            warehouse_id: ${var.sql_warehouse_id}
+            file:
+              path: ../sql/materialized_views.sql

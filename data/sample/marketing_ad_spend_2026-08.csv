@@ -1,0 +1,9 @@
+spend_date,channel,campaign,region,impressions,clicks,spend,currency
+2026-08-01,google_ads,summer_sale,APAC,120000,3400,450.00,USD
+2026-08-01,meta_ads,summer_sale,EMEA,98000,2100,380.00,EUR
+2026-08-02,google_ads,summer_sale,AMER,150000,5200,610.00,USD
+2026-08-02,tiktok_ads,brand_awareness,APAC,210000,4800,290.00,USD
+2026-08-03,meta_ads,retargeting,LATAM,54000,1600,175.00,USD
+2026-08-03,google_ads,summer_sale,EMEA,88000,2500,410.00,GBP
+2026-08-04,tiktok_ads,brand_awareness,AMER,175000,3900,320.00,USD
+2026-08-05,meta_ads,summer_sale,APAC,102000,2700,360.00,USD

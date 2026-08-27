@@ -14,9 +14,17 @@ Two-step pattern:
   2. Insert a fresh "current" row for new products and just-closed ones.
 """
 
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, current_date, lit
-from delta.tables import DeltaTable
+import os
+import sys
+
+# Make src/ importable when run as a Databricks spark_python_task.
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from delta.tables import DeltaTable  # noqa: E402
+from pyspark.sql import SparkSession  # noqa: E402
+from pyspark.sql.functions import broadcast, col, current_date, lit  # noqa: E402
+
+from common.spark_session import get_spark  # noqa: E402
 
 SILVER_PRODUCTS_TABLE = "silver.products"
 GOLD_DIM_PRODUCT_TABLE = "gold.dim_product"
@@ -52,24 +60,29 @@ def run(spark: SparkSession):
         .execute()
     )
 
-    # Step 2: insert fresh current-version rows for new products + just-closed ones
-    current_gold = spark.read.table(GOLD_DIM_PRODUCT_TABLE).filter(col("is_current") == True)
+    # Step 2: insert fresh current-version rows for new products + just-closed ones.
+    # The current-version key set is small -> broadcast it for the anti-join.
+    current_keys = (
+        spark.read.table(GOLD_DIM_PRODUCT_TABLE)
+        .filter(col("is_current") == True)  # noqa: E712 - Spark column, not Python bool
+        .select("product_id")
+    )
 
     new_versions = (
         silver_products.alias("s")
-        .join(current_gold.alias("d"), "product_id", "left_anti")
+        .join(broadcast(current_keys).alias("d"), "product_id", "left_anti")
         .withColumn("effective_start_date", current_date())
         .withColumn("effective_end_date", lit(None).cast("date"))
         .withColumn("is_current", lit(True))
     )
 
-    row_count = new_versions.count()
-    if row_count > 0:
+    # isEmpty() short-circuits on the first row instead of counting the whole set.
+    if not new_versions.isEmpty():
         new_versions.write.format("delta").mode("append").saveAsTable(GOLD_DIM_PRODUCT_TABLE)
-
-    print(f"dim_product SCD2 merge complete: {row_count} new/versioned rows inserted")
+        print(f"dim_product SCD2: new/versioned rows inserted into {GOLD_DIM_PRODUCT_TABLE}")
+    else:
+        print("dim_product SCD2 merge complete: no new/versioned rows")
 
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.getOrCreate()
-    run(spark)
+    run(get_spark("gold-dim-product-scd2"))

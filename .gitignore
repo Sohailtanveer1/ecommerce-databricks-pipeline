@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.Python
+.venv/
+venv/
+env/
+ENV/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+
+# Databricks
+.databricks/
+.databricks-login.json
+*.dbc
+
+# Spark / local run artifacts
+spark-warehouse/
+metastore_db/
+derby.log
+*.crc
+_SUCCESS
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+*.tfplan
+*.tfplan.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+.terraformrc
+terraform.rc
+.terraform.lock.hcl
+
+# Secrets — never commit credentials (they live in Key Vault / a secret scope)
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+secrets.*
+.databrickscfg
+azure.auth
+*.publishsettings
+sas_token*
+*_rsa
+id_rsa*
