@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS bronze.orders (
     product_id STRING,
     order_date STRING,      -- kept as raw string in Bronze; cast happens in Silver
     amount DOUBLE,
+    currency STRING,        -- multi-currency; normalized to USD in Gold via fx_rates
     order_status STRING,
     updated_at TIMESTAMP,
     source_file_path STRING,
