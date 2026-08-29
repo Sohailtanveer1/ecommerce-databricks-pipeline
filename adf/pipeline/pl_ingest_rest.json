@@ -1,0 +1,20 @@
+{
+  "name": "pl_ingest_rest",
+  "properties": {
+    "description": "REST ingestion (partner APIs). One Databricks job pulls every 'rest' object in control.source_objects (pagination + incremental-by-date handled in code) into Bronze. Activity retry covers transient HTTP 429/503; the code also retries within the request.",
+    "parameters": { "run_date": { "type": "string", "defaultValue": "2026-01-01" } },
+    "activities": [
+      {
+        "name": "REST_To_Bronze",
+        "type": "DatabricksSparkPython",
+        "policy": { "timeout": "0.00:30:00", "retry": 3, "retryIntervalInSeconds": 60 },
+        "typeProperties": {
+          "pythonFile": "dbfs:/Workspace/.bundle/.../src/ingestion/rest_to_bronze.py",
+          "parameters": ["@pipeline().parameters.run_date"]
+        },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" }
+      }
+    ],
+    "annotations": ["ingest", "rest"]
+  }
+}

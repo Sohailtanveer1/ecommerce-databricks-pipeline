@@ -1,0 +1,71 @@
+{
+  "name": "pl_ingest_watermark",
+  "properties": {
+    "description": "Metadata-driven watermark ingestion (SQL Server via SHIR). One Lookup gets every 'watermark' object from control.source_objects; a ForEach Copies each table's incremental slice to ADLS landing; then one Databricks job loads landing->Bronze and advances control.watermarks. Add tables in sources.yaml, not here.",
+    "parameters": { "run_date": { "type": "string", "defaultValue": "2026-01-01" } },
+    "activities": [
+      {
+        "name": "Lookup_Watermark_Objects",
+        "type": "Lookup",
+        "policy": { "timeout": "0.00:10:00", "retry": 2, "retryIntervalInSeconds": 30 },
+        "typeProperties": {
+          "source": {
+            "type": "AzureDatabricksDeltaLakeSource",
+            "query": "SELECT object_id, source_schema, source_table, watermark_column, target_bronze FROM ecommerce_dev.control.source_objects WHERE pattern='watermark' AND enabled"
+          },
+          "dataset": { "referenceName": "ds_control_objects", "type": "DatasetReference" },
+          "firstRowOnly": false
+        }
+      },
+      {
+        "name": "ForEach_Object",
+        "type": "ForEach",
+        "dependsOn": [{ "activity": "Lookup_Watermark_Objects", "dependencyConditions": ["Succeeded"] }],
+        "typeProperties": {
+          "items": { "value": "@activity('Lookup_Watermark_Objects').output.value", "type": "Expression" },
+          "isSequential": false,
+          "batchCount": 4,
+          "activities": [
+            {
+              "name": "Lookup_Last_Watermark",
+              "type": "Lookup",
+              "policy": { "timeout": "0.00:05:00", "retry": 2, "retryIntervalInSeconds": 20 },
+              "typeProperties": {
+                "source": {
+                  "type": "AzureDatabricksDeltaLakeSource",
+                  "query": { "value": "SELECT COALESCE(MAX(last_watermark_value),'1900-01-01 00:00:00') AS wm FROM ecommerce_dev.control.watermarks WHERE object_id='@{item().object_id}'", "type": "Expression" }
+                },
+                "dataset": { "referenceName": "ds_control_objects", "type": "DatasetReference" },
+                "firstRowOnly": true
+              }
+            },
+            {
+              "name": "Copy_Incremental_Slice",
+              "type": "Copy",
+              "dependsOn": [{ "activity": "Lookup_Last_Watermark", "dependencyConditions": ["Succeeded"] }],
+              "policy": { "timeout": "0.00:30:00", "retry": 3, "retryIntervalInSeconds": 60 },
+              "typeProperties": {
+                "source": {
+                  "type": "SqlServerSource",
+                  "sqlReaderQuery": { "value": "SELECT * FROM [@{item().source_schema}].[@{item().source_table}] WHERE [@{item().watermark_column}] > '@{activity('Lookup_Last_Watermark').output.firstRow.wm}'", "type": "Expression" }
+                },
+                "sink": { "type": "ParquetSink", "storeSettings": { "type": "AzureBlobFSWriteSettings" } }
+              },
+              "inputs": [{ "referenceName": "ds_sqlserver_table", "type": "DatasetReference", "parameters": { "schema": "@item().source_schema", "table": "@item().source_table" } }],
+              "outputs": [{ "referenceName": "ds_landing_parquet", "type": "DatasetReference", "parameters": { "system": "sqlserver_erp", "table": "@item().source_table", "run_date": "@pipeline().parameters.run_date" } }]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Load_Bronze_And_Advance_Watermark",
+        "type": "DatabricksSparkPython",
+        "dependsOn": [{ "activity": "ForEach_Object", "dependencyConditions": ["Succeeded"] }],
+        "policy": { "timeout": "0.00:45:00", "retry": 2, "retryIntervalInSeconds": 90 },
+        "typeProperties": { "pythonFile": "dbfs:/Workspace/.bundle/.../src/ingestion/watermark_to_bronze.py" },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" }
+      }
+    ],
+    "annotations": ["ingest", "watermark", "shir"]
+  }
+}

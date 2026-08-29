@@ -1,28 +1,88 @@
-# Local "transactional ERP" database — the JDBC source (Source #2).
-# ADF's Self-Hosted Integration Runtime (running on this same machine) reaches
-# it at host.docker.internal:5432.
+# ============================================================================
+# Local source systems for the v2 pipeline.
+#   postgres   - transactional DB, logical replication ON -> CDC via Debezium
+#   sqlserver  - "ERP", pulled on a watermark by ADF over the Self-Hosted IR
+#   redpanda   - Kafka-compatible broker (lighter than Kafka) for CDC events
+#   connect    - Kafka Connect + Debezium (Postgres connector)
+#   redpanda-console - UI to inspect CDC topics (optional)
 #
 #   docker compose -f docker/docker-compose.yml up -d
-#
+#   ./docker/debezium/register.sh            # register the CDC connector
+#   python docker/cdc_sink.py                # drain topics -> ADLS landing/cdc
+# ============================================================================
 services:
   postgres:
     image: postgres:16
-    container_name: ecommerce-postgres
+    container_name: v2-postgres
+    command: ["postgres", "-c", "wal_level=logical", "-c", "max_wal_senders=10", "-c", "max_replication_slots=10"]
     environment:
       POSTGRES_DB: ecommerce
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
+    ports: ["5432:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # Seed schema + data + a read-only user run once on first init.
-      - ./seed:/docker-entrypoint-initdb.d
+      - ./seed/postgres:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d ecommerce"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 15
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: v2-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Str0ng!Passw0rd"
+      MSSQL_PID: Developer
+    ports: ["1433:1433"]
+    volumes:
+      - mssqldata:/var/opt/mssql
+      - ./seed/sqlserver:/seed
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  redpanda:
+    image: redpandadata/redpanda:v24.1.7
+    container_name: v2-redpanda
+    command:
+      - redpanda start
+      - --overprovisioned
+      - --smp 1
+      - --memory 512M
+      - --reserve-memory 0M
+      - --node-id 0
+      - --check=false
+      - --kafka-addr PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:9092
+    ports: ["9092:9092"]
+
+  connect:
+    image: debezium/connect:2.7
+    container_name: v2-connect
+    depends_on: [postgres, redpanda]
+    environment:
+      BOOTSTRAP_SERVERS: redpanda:9092
+      GROUP_ID: cdc
+      CONFIG_STORAGE_TOPIC: _connect_configs
+      OFFSET_STORAGE_TOPIC: _connect_offsets
+      STATUS_STORAGE_TOPIC: _connect_status
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+    ports: ["8083:8083"]
+
+  redpanda-console:
+    image: redpandadata/console:v2.6.0
+    container_name: v2-redpanda-console
+    depends_on: [redpanda]
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    ports: ["8080:8080"]
 
 volumes:
   pgdata:
+  mssqldata:

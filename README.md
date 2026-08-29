@@ -8,6 +8,14 @@ Databricks/Delta → BI serving. Orchestrated by **Azure Data Factory**, governe
 Deployable on an Azure + Databricks free trial — see **[docs/RUNBOOK.md](docs/RUNBOOK.md)**.
 Interview prep: **[docs/INTERVIEW_PLAYBOOK.md](docs/INTERVIEW_PLAYBOOK.md)**.
 
+> **v2 (metadata-driven) is in progress on `feat/v2-metadata-driven`.** It adds a
+> 4th source and a control-table framework: Postgres **CDC (Debezium)**, SQL Server
+> **watermark (SHIR)**, **REST** APIs, and scheduled **CSV** drops — all
+> parameterized and multi-object via `config/sources.yaml`. See
+> **[docs/ARCHITECTURE_V2.md](docs/ARCHITECTURE_V2.md)**,
+> **[docs/ORCHESTRATION.md](docs/ORCHESTRATION.md)**, and
+> **[docs/PRODUCTION_ISSUES.md](docs/PRODUCTION_ISSUES.md)**.
+
 ## Architecture
 
 ```mermaid

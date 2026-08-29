@@ -1,0 +1,16 @@
+{
+  "name": "tr_master_daily",
+  "properties": {
+    "description": "Daily schedule for the master pipeline. Pipeline-LEVEL retry lives here (retryPolicy); activity-level retry lives on each activity's policy.",
+    "type": "ScheduleTrigger",
+    "typeProperties": {
+      "recurrence": { "frequency": "Day", "interval": 1, "startTime": "2026-08-28T03:00:00Z", "timeZone": "UTC" }
+    },
+    "pipelines": [
+      {
+        "pipelineReference": { "referenceName": "pl_master", "type": "PipelineReference" },
+        "parameters": { "run_date": "@formatDateTime(trigger().scheduledTime,'yyyy-MM-dd')" }
+      }
+    ]
+  }
+}

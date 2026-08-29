@@ -1,0 +1,16 @@
+{
+  "name": "pl_ingest_cdc",
+  "properties": {
+    "description": "CDC ingestion (Postgres via Debezium). Debezium+cdc_sink land change envelopes in ADLS landing/cdc; this job Auto Loads them into Bronze via MERGE for every 'cdc' object in control.source_objects. Activity retry handles transient cluster/storage blips; pipeline retry (trigger) covers the run.",
+    "activities": [
+      {
+        "name": "CDC_To_Bronze",
+        "type": "DatabricksSparkPython",
+        "policy": { "timeout": "0.00:45:00", "retry": 2, "retryIntervalInSeconds": 90 },
+        "typeProperties": { "pythonFile": "dbfs:/Workspace/.bundle/.../src/ingestion/cdc_to_bronze.py" },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" }
+      }
+    ],
+    "annotations": ["ingest", "cdc", "debezium"]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "postgres-cdc",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "debezium",
+    "database.password": "dbz",
+    "database.dbname": "ecommerce",
+    "topic.prefix": "postgres_txn",
+    "plugin.name": "pgoutput",
+    "publication.name": "dbz_publication",
+    "slot.name": "dbz_slot",
+    "table.include.list": "public.orders,public.customers,public.payments,public.addresses",
+    "tombstones.on.delete": "false",
+    "decimal.handling.mode": "double",
+    "time.precision.mode": "connect",
+    "snapshot.mode": "initial"
+  }
+}

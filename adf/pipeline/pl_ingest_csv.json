@@ -1,0 +1,16 @@
+{
+  "name": "pl_ingest_csv",
+  "properties": {
+    "description": "CSV ingestion (scheduled files from another team). One Databricks job Auto Loads every 'csv' object in control.source_objects (multi-object, multi-file, schema evolution + rescued data) into Bronze. Late/partial/duplicate files are absorbed by the Auto Loader checkpoint.",
+    "activities": [
+      {
+        "name": "CSV_To_Bronze",
+        "type": "DatabricksSparkPython",
+        "policy": { "timeout": "0.00:30:00", "retry": 2, "retryIntervalInSeconds": 60 },
+        "typeProperties": { "pythonFile": "dbfs:/Workspace/.bundle/.../src/ingestion/csv_to_bronze.py" },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" }
+      }
+    ],
+    "annotations": ["ingest", "csv"]
+  }
+}

@@ -1,0 +1,76 @@
+# ============================================================================
+# SOURCE / OBJECT REGISTRY  (metadata-driven ingestion)
+# ----------------------------------------------------------------------------
+# The single, version-controlled source of truth for WHAT gets ingested. Loaded
+# into the Delta control tables (control.source_objects) by
+# framework/load_control.py, then read by ADF (Lookup -> ForEach) and the
+# Databricks jobs. Add a table/endpoint/file here — no pipeline code changes.
+#
+# ingestion_pattern: watermark | cdc | rest | csv
+# load_type:         full | incremental
+# Each object maps to exactly one bronze table.
+# ============================================================================
+
+defaults:
+  catalog: ecommerce_dev
+  enabled: true
+
+sources:
+
+  # ---- Source #3: SQL Server (Docker) — watermark pull via ADF + SHIR --------
+  # Demonstrates the "handle >4 tables from one parameterized pipeline" ask.
+  - source_system: sqlserver_erp
+    pattern: watermark
+    connection: sqlserver_local          # linked service / secret scope key
+    integration_runtime: shir-local      # pulled over the Self-Hosted IR
+    objects:
+      - { schema: dbo, table: orders,       watermark_column: modified_at, primary_keys: [order_id],        load_type: incremental }
+      - { schema: dbo, table: order_items,  watermark_column: modified_at, primary_keys: [order_item_id],   load_type: incremental }
+      - { schema: dbo, table: customers,    watermark_column: modified_at, primary_keys: [customer_id],     load_type: incremental }
+      - { schema: dbo, table: products,     watermark_column: modified_at, primary_keys: [product_id],      load_type: incremental }
+      - { schema: dbo, table: inventory,    watermark_column: modified_at, primary_keys: [product_id, warehouse_id], load_type: incremental }
+      - { schema: dbo, table: returns,      watermark_column: modified_at, primary_keys: [return_id],       load_type: incremental }
+      - { schema: dbo, table: fx_reference, watermark_column: modified_at, primary_keys: [currency, as_of_date], load_type: full }  # small dim, full each run
+
+  # ---- Source #1: PostgreSQL (Docker) — log-based CDC via Debezium -----------
+  # SHIR can't tail the WAL, so Debezium -> Redpanda -> ADLS files -> Auto Loader.
+  - source_system: postgres_txn
+    pattern: cdc
+    connection: postgres_local
+    cdc:
+      connector: debezium
+      broker: redpanda
+      landing_format: json               # Debezium envelope (before/after/op/ts_ms)
+    objects:
+      - { schema: public, table: orders,    primary_keys: [order_id] }
+      - { schema: public, table: customers, primary_keys: [customer_id] }
+      - { schema: public, table: payments,  primary_keys: [payment_id] }
+      - { schema: public, table: addresses, primary_keys: [address_id] }
+
+  # ---- Source #2: REST API — multiple endpoints -----------------------------
+  - source_system: partner_api
+    pattern: rest
+    connection: partner_api               # base url + auth in secret scope
+    objects:
+      - name: fx_rates
+        endpoint: "https://api.frankfurter.app/{run_date}"
+        method: GET
+        params: { from: USD, to: "EUR,GBP,INR,BRL" }
+        incremental_by: run_date
+        primary_keys: [as_of_date, quote_currency]
+      - name: product_enrichment
+        endpoint: "https://dummyjson.com/products"
+        method: GET
+        params: { limit: 100 }
+        pagination: { type: limit_skip, limit_param: limit, skip_param: skip, page_size: 100 }
+        primary_keys: [id]
+
+  # ---- Source #4: CSV files in ADLS — arrive on schedule from another team ---
+  # Multiple objects; Auto Loader per object handles multi-file arrival.
+  - source_system: partner_files
+    pattern: csv
+    connection: adls_landing
+    objects:
+      - { name: marketing_ad_spend, path: "landing/partner_files/marketing_ad_spend/", primary_keys: [spend_date, channel, campaign, region] }
+      - { name: supplier_costs,     path: "landing/partner_files/supplier_costs/",     primary_keys: [supplier_id, product_id, effective_date] }
+      - { name: store_locations,    path: "landing/partner_files/store_locations/",    primary_keys: [store_id] }

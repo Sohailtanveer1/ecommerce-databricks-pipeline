@@ -1,0 +1,64 @@
+{
+  "name": "pl_master",
+  "properties": {
+    "description": "Master orchestrator. Runs the per-pattern ingestion pipelines, then the medallion + serving + alert dispatch. This is what the schedule trigger hits. Pipeline-level retry is on the trigger; each child pipeline retries its own activities and reprocesses only failed objects.",
+    "parameters": {
+      "run_date": { "type": "string", "defaultValue": "@formatDateTime(utcnow(),'yyyy-MM-dd')" }
+    },
+    "activities": [
+      {
+        "name": "Sync_Control_Registry",
+        "type": "DatabricksSparkPython",
+        "policy": { "timeout": "0.00:20:00", "retry": 2, "retryIntervalInSeconds": 60 },
+        "typeProperties": { "pythonFile": "dbfs:/Workspace/.bundle/.../src/framework/load_control.py" },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" }
+      },
+      {
+        "name": "Ingest_Watermark",
+        "type": "ExecutePipeline",
+        "dependsOn": [{ "activity": "Sync_Control_Registry", "dependencyConditions": ["Succeeded"] }],
+        "typeProperties": { "pipeline": { "referenceName": "pl_ingest_watermark", "type": "PipelineReference" }, "waitOnCompletion": true, "parameters": { "run_date": "@pipeline().parameters.run_date" } }
+      },
+      {
+        "name": "Ingest_CDC",
+        "type": "ExecutePipeline",
+        "dependsOn": [{ "activity": "Sync_Control_Registry", "dependencyConditions": ["Succeeded"] }],
+        "typeProperties": { "pipeline": { "referenceName": "pl_ingest_cdc", "type": "PipelineReference" }, "waitOnCompletion": true }
+      },
+      {
+        "name": "Ingest_REST",
+        "type": "ExecutePipeline",
+        "dependsOn": [{ "activity": "Sync_Control_Registry", "dependencyConditions": ["Succeeded"] }],
+        "typeProperties": { "pipeline": { "referenceName": "pl_ingest_rest", "type": "PipelineReference" }, "waitOnCompletion": true, "parameters": { "run_date": "@pipeline().parameters.run_date" } }
+      },
+      {
+        "name": "Ingest_CSV",
+        "type": "ExecutePipeline",
+        "dependsOn": [{ "activity": "Sync_Control_Registry", "dependencyConditions": ["Succeeded"] }],
+        "typeProperties": { "pipeline": { "referenceName": "pl_ingest_csv", "type": "PipelineReference" }, "waitOnCompletion": true }
+      },
+      {
+        "name": "Build_Medallion",
+        "type": "DatabricksSparkPython",
+        "dependsOn": [
+          { "activity": "Ingest_Watermark", "dependencyConditions": ["Succeeded"] },
+          { "activity": "Ingest_CDC", "dependencyConditions": ["Succeeded"] },
+          { "activity": "Ingest_REST", "dependencyConditions": ["Succeeded"] },
+          { "activity": "Ingest_CSV", "dependencyConditions": ["Succeeded"] }
+        ],
+        "policy": { "timeout": "0.01:00:00", "retry": 1, "retryIntervalInSeconds": 120 },
+        "typeProperties": { "pythonFile": "dbfs:/Workspace/.bundle/.../src/pipeline/run_medallion.py" },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" }
+      },
+      {
+        "name": "Dispatch_Alerts",
+        "type": "DatabricksSparkPython",
+        "dependsOn": [{ "activity": "Build_Medallion", "dependencyConditions": ["Succeeded", "Failed"] }],
+        "policy": { "timeout": "0.00:15:00", "retry": 2, "retryIntervalInSeconds": 30 },
+        "typeProperties": { "pythonFile": "dbfs:/Workspace/.bundle/.../src/framework/dispatch_alerts.py" },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" }
+      }
+    ],
+    "annotations": ["master", "orchestrator"]
+  }
+}
