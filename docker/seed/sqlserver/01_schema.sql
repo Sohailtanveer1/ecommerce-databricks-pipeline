@@ -1,6 +1,14 @@
 -- SQL Server "ERP" — the watermark source (ADF Copy over SHIR pulls WHERE
--- modified_at > last_watermark). Every table carries modified_at for the pull.
--- Run:  sqlcmd -S localhost -U sa -P 'Str0ng!Passw0rd' -C -i /seed/01_schema.sql
+-- <watermark_column> > last_watermark). Each table's watermark column name differs
+-- on purpose (see sources.yaml); every one carries a UTC audit timestamp.
+--
+-- Run (the image ships sqlcmd at /opt/mssql-tools18/bin/sqlcmd):
+--   docker exec -i v2-sqlserver /opt/mssql-tools18/bin/sqlcmd \
+--     -S localhost -U sa -P 'Str0ng!Passw0rd' -C -i /seed/01_schema.sql
+--
+-- On Git Bash / MSYS (Windows), prefix with MSYS_NO_PATHCONV=1 (or use //opt/...
+-- and //seed/...) so it does not rewrite the container paths to Windows paths:
+--   MSYS_NO_PATHCONV=1 docker exec -i v2-sqlserver /opt/mssql-tools18/bin/sqlcmd ...
 IF DB_ID('erp') IS NULL CREATE DATABASE erp;
 GO
 USE erp;
