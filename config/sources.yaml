@@ -24,7 +24,15 @@ sources:
     connection: sqlserver_local          # linked service / secret scope key
     integration_runtime: shir-local      # pulled over the Self-Hosted IR
     objects:
-      - { schema: dbo, table: orders,       watermark_column: modified_at, primary_keys: [order_id],        load_type: incremental }
+      - schema: dbo
+        table: orders
+        watermark_column: modified_at
+        primary_keys: [order_id]
+        load_type: incremental
+        dq:
+          not_null: [order_id, customer_id, order_date]
+          ranges: { amount: { min: 0 } }
+          allowed_values: { order_status: [pending, paid, shipped, delivered, cancelled, returned] }
       - { schema: dbo, table: order_items,  watermark_column: modified_at, primary_keys: [order_item_id],   load_type: incremental }
       - { schema: dbo, table: customers,    watermark_column: modified_at, primary_keys: [customer_id],     load_type: incremental }
       - { schema: dbo, table: products,     watermark_column: modified_at, primary_keys: [product_id],      load_type: incremental }
@@ -42,7 +50,12 @@ sources:
       broker: redpanda
       landing_format: json               # Debezium envelope (before/after/op/ts_ms)
     objects:
-      - { schema: public, table: orders,    primary_keys: [order_id] }
+      - schema: public
+        table: orders
+        primary_keys: [order_id]
+        dq:
+          not_null: [order_id, customer_id]
+          ranges: { amount: { min: 0 } }
       - { schema: public, table: customers, primary_keys: [customer_id] }
       - { schema: public, table: payments,  primary_keys: [payment_id] }
       - { schema: public, table: addresses, primary_keys: [address_id] }
@@ -71,6 +84,16 @@ sources:
     pattern: csv
     connection: adls_landing
     objects:
-      - { name: marketing_ad_spend, path: "landing/partner_files/marketing_ad_spend/", primary_keys: [spend_date, channel, campaign, region] }
-      - { name: supplier_costs,     path: "landing/partner_files/supplier_costs/",     primary_keys: [supplier_id, product_id, effective_date] }
-      - { name: store_locations,    path: "landing/partner_files/store_locations/",    primary_keys: [store_id] }
+      - name: marketing_ad_spend
+        path: "landing/partner_files/marketing_ad_spend/"
+        primary_keys: [spend_date, channel, campaign, region]
+        dq:                                    # bad rows -> quarantine, good rows -> Silver
+          not_null: [spend_date, channel, spend]
+          allowed_values: { currency: [USD, EUR, GBP, INR] }
+      - name: supplier_costs
+        path: "landing/partner_files/supplier_costs/"
+        primary_keys: [supplier_id, product_id, effective_date]
+        dq:
+          not_null: [supplier_id, product_id, unit_cost]
+          ranges: { unit_cost: { min: 0 } }
+      - { name: store_locations, path: "landing/partner_files/store_locations/", primary_keys: [store_id] }

@@ -5,6 +5,9 @@
 -- ============================================================================
 
 CREATE SCHEMA IF NOT EXISTS control;
+-- Dead-letter schema: per-object quarantine tables (bad rows) are created here on
+-- first write by framework.quarantine.
+CREATE SCHEMA IF NOT EXISTS quarantine;
 
 -- The object registry — one row per thing we ingest (mirrors sources.yaml).
 CREATE TABLE IF NOT EXISTS control.source_objects (

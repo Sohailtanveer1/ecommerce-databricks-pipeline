@@ -42,7 +42,7 @@ resource "databricks_catalog" "this" {
 }
 
 resource "databricks_schema" "layers" {
-  for_each      = toset(["bronze", "silver", "gold", "governance", "control"])
+  for_each      = toset(["bronze", "silver", "gold", "governance", "control", "quarantine"])
   catalog_name  = databricks_catalog.this.name
   name          = each.value
   comment       = "${each.value} layer."

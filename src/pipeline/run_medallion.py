@@ -21,7 +21,7 @@ CATALOG = os.environ.get("CATALOG", "ecommerce_dev")
 
 # (module, run) pairs for each transform step, in order. Extend as layers grow.
 STEPS = [
-    ("silver.silver_transform_orders", "orders -> silver"),
+    ("silver.silver_generic", "bronze -> silver (metadata-driven, quarantine bad rows)"),
     ("gold.gold_dim_product_scd2", "gold dim_product SCD2"),
     ("gold.gold_fact_orders", "gold fact_orders"),
 ]

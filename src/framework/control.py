@@ -37,7 +37,10 @@ class SourceObject:
     primary_keys: list[str]
     load_type: str | None
     target_bronze: str
+    target_silver: str
+    target_quarantine: str
     options: dict = field(default_factory=dict)
+    dq: dict = field(default_factory=dict)
     enabled: bool = True
 
 
@@ -56,7 +59,15 @@ def _flatten(cfg: dict) -> list[SourceObject]:
                 k: str(v)
                 for k, v in obj.items()
                 if k
-                not in ("name", "table", "schema", "watermark_column", "primary_keys", "load_type")
+                not in (
+                    "name",
+                    "table",
+                    "schema",
+                    "watermark_column",
+                    "primary_keys",
+                    "load_type",
+                    "dq",
+                )
             }
             out.append(
                 SourceObject(
@@ -71,7 +82,10 @@ def _flatten(cfg: dict) -> list[SourceObject]:
                     primary_keys=obj.get("primary_keys", []),
                     load_type=obj.get("load_type", "incremental"),
                     target_bronze=f"{catalog}.bronze.{system}__{name}",
+                    target_silver=f"{catalog}.silver.{system}__{name}",
+                    target_quarantine=f"{catalog}.quarantine.{system}__{name}",
                     options=options,
+                    dq=obj.get("dq", {}),
                     enabled=default_enabled,
                 )
             )
