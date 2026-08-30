@@ -1,0 +1,19 @@
+# UAT environment. Copy to uat.tfvars (gitignored) and fill in.
+# Applied by CI on merge to main (see .github/workflows/terraform.yml).
+project     = "ecomlake"
+environment = "uat"
+location    = "eastus"
+
+# The UAT deploy service principal / admin object id (not a developer's).
+my_object_id = "00000000-0000-0000-0000-000000000000"
+
+# UAT source systems (not the Docker mocks). Reached via the UAT Self-Hosted IR
+# or a managed VNet gateway.
+postgres_jdbc_url = "jdbc:postgresql://uat-erp-db:5432/ecommerce"
+postgres_username = "ecom_reader"
+postgres_password = "set-in-ci-from-key-vault-or-tfvars"
+
+fx_api_key = ""
+
+log_retention_days = 60
+extra_containers   = []

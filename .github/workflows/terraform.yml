@@ -1,13 +1,16 @@
 name: Terraform
 
-# fmt + validate + plan on every PR; apply on push to main (manual-gated via the
-# `azure-prod`/`azure-dev` environment). Auth uses OIDC federated credentials —
-# no long-lived cloud secret is stored in GitHub.
+# Promotion:
+#   * PR                    -> fmt + validate + plan (dev) for review
+#   * merge to main         -> apply to UAT
+#   * publish a vX.Y.Z tag  -> apply to PROD (manual approval)
+# Auth uses OIDC federated credentials — no long-lived cloud secret in GitHub.
 on:
   pull_request:
     paths: ["infra/terraform/**", ".github/workflows/terraform.yml"]
   push:
     branches: [main]
+    tags: ["v*.*.*"]
     paths: ["infra/terraform/**"]
 
 permissions:
@@ -52,3 +55,47 @@ jobs:
         run: |
           terraform init
           terraform plan -var-file=dev.tfvars -input=false
+
+  apply-uat:
+    needs: fmt-validate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: azure-uat
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+      - name: apply foundation + platform (UAT)
+        run: |
+          terraform -chdir=infra/terraform/foundation init
+          terraform -chdir=infra/terraform/foundation apply -auto-approve -var-file=uat.tfvars
+          terraform -chdir=infra/terraform/platform init
+          terraform -chdir=infra/terraform/platform apply -auto-approve
+
+  apply-prod:
+    needs: fmt-validate
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: azure-prod # required reviewers gate the prod apply
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+      - name: apply foundation + platform (PROD)
+        run: |
+          terraform -chdir=infra/terraform/foundation init
+          terraform -chdir=infra/terraform/foundation apply -auto-approve -var-file=prod.tfvars
+          terraform -chdir=infra/terraform/platform init
+          terraform -chdir=infra/terraform/platform apply -auto-approve

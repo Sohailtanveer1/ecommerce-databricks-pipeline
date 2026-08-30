@@ -36,20 +36,24 @@ targets:
     variables:
       catalog: ecommerce_dev
 
-  staging:
+  # UAT — first shared, CI-managed environment (deployed on merge to main).
+  uat:
     mode: production
     workspace:
-      host: https://adb-staging.azuredatabricks.net
+      host: https://adb-uat.azuredatabricks.net # set from `terraform output` per env
       root_path: /Shared/.bundle/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: etl-sp-uat
     variables:
-      catalog: lakehouse_catalog_staging
+      catalog: ecommerce_uat
 
+  # PROD — tag-driven, manual approval (deployed on a vX.Y.Z release).
   prod:
     mode: production
     workspace:
       host: https://adb-prod.azuredatabricks.net
       root_path: /Shared/.bundle/${bundle.name}/${bundle.target}
     run_as:
-      service_principal_name: etl-service-principal
+      service_principal_name: etl-sp-prod
     variables:
-      catalog: lakehouse_catalog
+      catalog: ecommerce_prod
