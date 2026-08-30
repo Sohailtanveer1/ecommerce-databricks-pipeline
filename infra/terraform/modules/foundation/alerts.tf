@@ -1,13 +1,7 @@
 # Monitoring & alerting: an action group (who gets notified) + alert rules on
 # ADF pipeline failures. Data-quality/freshness alerts flow through the
 # control.alerts outbox (dispatched from Databricks) into the same action group
-# via its webhook.
-
-variable "alert_email" {
-  description = "Email that receives pipeline-failure alerts."
-  type        = string
-  default     = "data-team@example.com"
-}
+# via its webhook. (var.alert_email is declared in variables.tf)
 
 resource "azurerm_monitor_action_group" "main" {
   name                = "ag-${local.base}"

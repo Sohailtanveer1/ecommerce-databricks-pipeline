@@ -5,7 +5,7 @@ resource "databricks_secret_scope" "kv" {
   name = "kv-${var.environment}"
 
   keyvault_metadata {
-    resource_id = data.terraform_remote_state.foundation.outputs.key_vault_id
-    dns_name    = data.terraform_remote_state.foundation.outputs.key_vault_uri
+    resource_id = var.key_vault_id
+    dns_name    = var.key_vault_uri
   }
 }

@@ -1,5 +1,6 @@
 name: Terraform
 
+# Modular layout: modules/{foundation,platform} + environments/{dev,uat,prod}/{foundation,platform}.
 # Promotion:
 #   * PR                    -> fmt + validate + plan (dev) for review
 #   * merge to main         -> apply to UAT
@@ -14,7 +15,7 @@ on:
     paths: ["infra/terraform/**"]
 
 permissions:
-  id-token: write   # OIDC
+  id-token: write # OIDC
   contents: read
 
 jobs:
@@ -22,18 +23,19 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        layer: [foundation, platform]
+        root: [environments/dev/foundation, environments/dev/platform]
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.0
-      - name: fmt
-        run: terraform -chdir=infra/terraform/${{ matrix.layer }} fmt -check
-      - name: init (no backend)
-        run: terraform -chdir=infra/terraform/${{ matrix.layer }} init -backend=false
-      - name: validate
-        run: terraform -chdir=infra/terraform/${{ matrix.layer }} validate
+      - name: fmt (recursive)
+        run: terraform -chdir=infra/terraform fmt -check -recursive
+      - name: init (no backend) + validate
+        working-directory: infra/terraform/${{ matrix.root }}
+        run: |
+          terraform init -backend=false
+          terraform validate
 
   plan:
     needs: fmt-validate
@@ -50,11 +52,11 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.0
-      - name: plan foundation
-        working-directory: infra/terraform/foundation
+      - name: plan dev foundation
+        working-directory: infra/terraform/environments/dev/foundation
         run: |
           terraform init
-          terraform plan -var-file=dev.tfvars -input=false
+          terraform plan -input=false
 
   apply-uat:
     needs: fmt-validate
@@ -71,12 +73,12 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.0
-      - name: apply foundation + platform (UAT)
+      - name: apply UAT (foundation -> platform)
         run: |
-          terraform -chdir=infra/terraform/foundation init
-          terraform -chdir=infra/terraform/foundation apply -auto-approve -var-file=uat.tfvars
-          terraform -chdir=infra/terraform/platform init
-          terraform -chdir=infra/terraform/platform apply -auto-approve
+          terraform -chdir=infra/terraform/environments/uat/foundation init
+          terraform -chdir=infra/terraform/environments/uat/foundation apply -auto-approve
+          terraform -chdir=infra/terraform/environments/uat/platform init
+          terraform -chdir=infra/terraform/environments/uat/platform apply -auto-approve
 
   apply-prod:
     needs: fmt-validate
@@ -93,9 +95,9 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.0
-      - name: apply foundation + platform (PROD)
+      - name: apply PROD (foundation -> platform)
         run: |
-          terraform -chdir=infra/terraform/foundation init
-          terraform -chdir=infra/terraform/foundation apply -auto-approve -var-file=prod.tfvars
-          terraform -chdir=infra/terraform/platform init
-          terraform -chdir=infra/terraform/platform apply -auto-approve
+          terraform -chdir=infra/terraform/environments/prod/foundation init
+          terraform -chdir=infra/terraform/environments/prod/foundation apply -auto-approve
+          terraform -chdir=infra/terraform/environments/prod/platform init
+          terraform -chdir=infra/terraform/environments/prod/platform apply -auto-approve

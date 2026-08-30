@@ -25,3 +25,24 @@ variable "group_pii_readers" {
   type    = string
   default = "pii-authorized"
 }
+
+# --- Foundation outputs, passed in by the environment root ---
+variable "adls_account_name" {
+  type = string
+}
+
+variable "adls_containers" {
+  type = list(string)
+}
+
+variable "databricks_access_connector_id" {
+  type = string
+}
+
+variable "key_vault_id" {
+  type = string
+}
+
+variable "key_vault_uri" {
+  type = string
+}

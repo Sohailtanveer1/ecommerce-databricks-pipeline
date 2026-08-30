@@ -57,7 +57,7 @@ etc., with zero new pipelines when you add more.
 - `control.alerts` is a **decoupled outbox** — jobs append, `dispatch_alerts`
   delivers (webhook for WARN/CRITICAL), so a flaky notification never breaks
   ingestion and no alert is lost on failure.
-- **Azure Monitor** alert rules (`infra/terraform/foundation/alerts.tf`) fire on
+- **Azure Monitor** alert rules (`infra/terraform/modules/foundation/alerts.tf`) fire on
   ADF pipeline failures → action group (email/webhook).
 - **ADF native** on-failure email is the backstop at the pipeline level.
 - `pipeline_runs` + `dq_results` power a monitoring dashboard (rows in/out,

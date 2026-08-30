@@ -1,57 +1,67 @@
-# Terraform
+# Terraform — modular, per-environment
 
-Two layers, applied in order, with **separate state** (separate blast radius).
+Reusable **modules** called by thin, per-environment **roots**. Each environment
+has its own state and its own config, so dev/UAT/prod are fully isolated and can
+differ in sizing.
 
 ```
 infra/terraform/
-├── foundation/   # Azure resources: RG, ADLS, Key Vault, Databricks workspace,
-│                 #   ADF + Self-Hosted IR + linked services, Log Analytics, RBAC
-└── platform/     # Databricks/Unity Catalog objects: storage credential,
-                  #   external locations, catalog, schemas, grants, secret scope,
-                  #   cluster policy. Reads foundation outputs via remote state.
+├── modules/
+│   ├── foundation/    # RG, ADLS, Key Vault, Databricks workspace, ADF + SHIR,
+│   │                  #   monitoring, alerts, RBAC, UC access connector
+│   └── platform/      # UC storage credential, external locations, catalog,
+│                      #   schemas, grants, KV-backed secret scope, cluster policy
+└── environments/
+    ├── dev/
+    │   ├── foundation/   # root: providers + backend(dev) + module "foundation"
+    │   └── platform/     # root: providers + backend(dev) + remote_state -> module "platform"
+    ├── uat/  { foundation, platform }
+    └── prod/ { foundation, platform }
 ```
 
-## Apply order
+## What differs per environment
+
+Roots pass env-specific inputs to the same modules:
+
+| Input | dev | uat | prod |
+|---|---|---|---|
+| `storage_replication_type` | LRS | LRS | **GRS** |
+| `log_retention_days` | 30 | 60 | 90 |
+| catalog | `ecommerce_dev` | `ecommerce_uat` | `ecommerce_prod` |
+| state key | `dev/*` | `uat/*` | `prod/*` |
+
+Add prod-only hardening (private endpoints, storage firewall, `prevent_destroy`)
+by extending the module with flags toggled on in the prod root.
+
+## Apply order (per environment)
 
 ```bash
-# 1) foundation
-cd foundation
-cp dev.tfvars.example dev.tfvars     # fill in my_object_id, postgres_password
+cd environments/dev/foundation
+cp terraform.tfvars.example terraform.tfvars   # fill my_object_id, postgres_password
 terraform init
-terraform apply -var-file=dev.tfvars
+terraform apply
 
-# 2) platform (after the workspace exists + a UC metastore is assigned)
-cd ../platform
+cd ../platform      # reads ../foundation state, builds Unity Catalog
 terraform init
 terraform apply
 ```
 
-Destroy in reverse: `platform` then `foundation`.
-
-## Prerequisites
-
-- `az login` (Terraform uses Azure CLI auth).
-- A **Unity Catalog metastore** in your region assigned to the workspace, and you
-  as metastore admin (see `docs/RUNBOOK.md` step 4).
-- The account groups referenced in `platform/variables.tf` must exist, or override
-  them with groups you have.
+Destroy in reverse (`platform` then `foundation`). Swap `dev` → `uat`/`prod` for
+other environments. CI does this automatically (see `.github/workflows/terraform.yml`).
 
 ## State
 
-Local by default (trial). For shared/CI use, uncomment the `azurerm` backend in
-`foundation/versions.tf` (and add one to `platform`) after creating a versioned,
-locked backend storage account. `*.tfstate` and `*.tfvars` are gitignored.
+Local per-folder state by default (each root keeps its own `terraform.tfstate`).
+For shared/CI use, enable the **azurerm backend** in each root's `versions.tf`
+with a per-env key (`<env>/foundation.tfstate`, `<env>/platform.tfstate`) after
+creating a versioned, locked backend storage account. `*.tfstate` and
+`*.tfvars` are gitignored.
 
-## Multi-environment
+## Notes
 
-Promote to prod by adding `prod.tfvars` + a separate state (or a Terraform
-workspace) — no code fork. Kept dev-only here to stay within free-trial limits.
-
-## Notes / caveats
-
-- `terraform validate` passes for both layers. A full `plan`/`apply` needs your
-  Azure subscription and the UC metastore prerequisite.
-- The Postgres linked service is a custom service (`PostgreSqlV2`) so it can
-  reference a Key Vault secret **and** connect via the Self-Hosted IR. Connector
-  property names occasionally shift between ADF connector versions — if a field is
-  rejected, verify in ADF Studio and adjust `type_properties_json`.
+- `terraform validate` passes for the module roots. A full `plan`/`apply` needs
+  your Azure subscription and a UC metastore assigned to the workspace (see
+  `docs/RUNBOOK.md`).
+- The Postgres linked service is a custom ADF service so it can reference a Key
+  Vault secret *and* connect via the Self-Hosted IR; its `type` may not round-trip
+  in state (a harmless perpetual re-create on plan).

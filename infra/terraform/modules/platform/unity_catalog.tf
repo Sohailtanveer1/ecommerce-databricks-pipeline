@@ -6,12 +6,9 @@
 # ============================================================
 
 locals {
-  adls_account = data.terraform_remote_state.foundation.outputs.adls_account_name
-  containers   = data.terraform_remote_state.foundation.outputs.adls_containers
-
   abfss = {
-    for c in local.containers :
-    c => "abfss://${c}@${local.adls_account}.dfs.core.windows.net/"
+    for c in var.adls_containers :
+    c => "abfss://${c}@${var.adls_account_name}.dfs.core.windows.net/"
   }
 }
 
@@ -19,7 +16,7 @@ locals {
 resource "databricks_storage_credential" "adls" {
   name = "sc_${var.environment}_adls"
   azure_managed_identity {
-    access_connector_id = data.terraform_remote_state.foundation.outputs.databricks_access_connector_id
+    access_connector_id = var.databricks_access_connector_id
   }
   comment = "Managed-identity credential for the ${var.environment} lakehouse."
 }
@@ -37,7 +34,7 @@ resource "databricks_catalog" "this" {
   name          = var.catalog_name
   comment       = "E-commerce lakehouse (${var.environment})."
   storage_root  = local.abfss["bronze"] # managed-table root; external paths still used per layer
-  force_destroy = true                   # dev: allow destroy even with tables present
+  force_destroy = true                  # dev: allow destroy even with tables present
   depends_on    = [databricks_external_location.loc]
 }
 

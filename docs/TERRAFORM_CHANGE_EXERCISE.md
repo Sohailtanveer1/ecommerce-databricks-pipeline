@@ -8,13 +8,13 @@ kinds of change: **update-in-place** vs **add a resource**. A third shows a
 
 > Run this after the foundation layer is applied (see `docs/RUNBOOK.md` step 2).
 > Both tunables are already wired to variables, so each change is a **one-line
-> `dev.tfvars` edit** — you never hand-edit a resource block for a routine change.
+> `terraform.tfvars` edit** — you never hand-edit a resource block for a routine change.
 
 ---
 
 ## Variant A — Update in place (Log Analytics retention 30 → 60)
 
-1. Baseline is `log_retention_days = 30`. Edit `infra/terraform/foundation/dev.tfvars`:
+1. Baseline is `log_retention_days = 30`. Edit `infra/terraform/environments/dev/foundation/terraform.tfvars`:
 
    ```hcl
    log_retention_days = 60
@@ -23,8 +23,8 @@ kinds of change: **update-in-place** vs **add a resource**. A third shows a
 2. Plan and **read the diff** before doing anything:
 
    ```bash
-   cd infra/terraform/foundation
-   terraform plan -var-file=dev.tfvars -out=change.tfplan
+   cd infra/terraform/environments/dev/foundation
+   terraform plan -out=change.tfplan
    ```
 
    Expect exactly one change, marked `~` (update in place):
@@ -58,13 +58,13 @@ kinds of change: **update-in-place** vs **add a resource**. A third shows a
 
 ## Variant B — Add a resource (new ADLS container)
 
-1. Edit `dev.tfvars`:
+1. Edit `terraform.tfvars`:
 
    ```hcl
    extra_containers = ["sandbox"]
    ```
 
-2. `terraform plan -var-file=dev.tfvars` shows **1 to add** — a new
+2. `terraform plan` shows **1 to add** — a new
    `azurerm_storage_data_lake_gen2_filesystem.containers["sandbox"]`, and
    **nothing else touched** (the `for_each` keys the existing containers by name,
    so adding one doesn't disturb the others).

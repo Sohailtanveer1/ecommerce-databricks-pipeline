@@ -35,12 +35,12 @@ value for `postgres_password` in step 2.
 ## 2. Deploy the Azure foundation (Terraform)
 
 ```bash
-cd infra/terraform/foundation
-cp dev.tfvars.example dev.tfvars
+cd infra/terraform/environments/dev/foundation
+cp terraform.tfvars.example terraform.tfvars
 # edit dev.tfvars: my_object_id, postgres_password, location
 #   my_object_id: az ad signed-in-user show --query id -o tsv
 terraform init
-terraform apply -var-file=dev.tfvars
+terraform apply
 ```
 
 Creates: resource group, ADLS Gen2 + containers, Key Vault (+ secrets), Databricks
@@ -68,7 +68,7 @@ Azure usually auto-creates one for new workspaces; if not:
 - Make yourself **metastore admin**.
 - Create (or reuse) the AAD/account groups referenced by grants:
   `data-engineers`, `data-analysts`, `pii-authorized` — or change the defaults in
-  `infra/terraform/platform/variables.tf` to groups you already have. Grants to a
+  `infra/terraform/environments/dev/platform/variables.tf` to groups you already have. Grants to a
   non-existent principal will error.
 
 ## 5. Deploy the platform layer (Unity Catalog + governance)
@@ -144,8 +144,8 @@ apply, verify, roll back. Great to have done before an interview.
 ## 11. Teardown (stop all cost)
 
 ```bash
-cd infra/terraform/platform  && terraform destroy
-cd ../foundation             && terraform destroy -var-file=dev.tfvars
+cd infra/terraform/environments/dev/platform  && terraform destroy
+cd ../foundation             && terraform destroy
 docker compose -f ../../../docker/docker-compose.yml down -v
 ```
 

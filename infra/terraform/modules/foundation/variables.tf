@@ -69,3 +69,23 @@ variable "extra_containers" {
   type        = list(string)
   default     = []
 }
+
+# --- Per-environment infrastructure sizing (set differently in each env root) ---
+
+variable "storage_replication_type" {
+  description = "ADLS replication. dev=LRS (cheap); prod=GRS/ZRS (durable)."
+  type        = string
+  default     = "LRS"
+}
+
+variable "databricks_sku" {
+  description = "Databricks workspace tier. Premium required for Unity Catalog."
+  type        = string
+  default     = "premium"
+}
+
+variable "alert_email" {
+  description = "Address that receives pipeline-failure alerts."
+  type        = string
+  default     = "data-team@example.com"
+}

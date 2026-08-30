@@ -6,7 +6,7 @@ The controls in this project and where each is implemented.
 
 | Concern | Control | Where |
 |---|---|---|
-| No credentials in code/state | **Azure Key Vault** is the only secret store | `infra/terraform/foundation/keyvault.tf` |
+| No credentials in code/state | **Azure Key Vault** is the only secret store | `infra/terraform/modules/foundation/keyvault.tf` |
 | ADF → secrets | Managed identity + `ls_keyvault` linked service; secrets referenced, never inlined | `data_factory.tf` |
 | Databricks → secrets | Key Vault-backed **secret scope** | `platform/secret_scope.tf` |
 | Databricks → ADLS | **Managed identity** (Access Connector) + UC storage credential; no keys/SAS | `storage.tf`, `platform/unity_catalog.tf` |
@@ -18,7 +18,7 @@ The controls in this project and where each is implemented.
 
 - **Schema-level least privilege.** Analysts: `USE_CATALOG` + read on **Gold only**.
   Bronze/Silver have no analyst grant → default-deny. Engineers operate all layers.
-  (`infra/terraform/platform/grants.tf`)
+  (`infra/terraform/modules/platform/grants.tf`)
 - **Column masking.** `email`, `phone` masked unless the caller is in
   `pii-authorized`. (`sql/governance/unity_catalog_masks.sql`)
 - **Row-level security.** `fact_orders` filtered by region unless `global-access`.
