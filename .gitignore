@@ -69,3 +69,6 @@ azure.auth
 sas_token*
 *_rsa
 id_rsa*
+
+# Local CDC sink output (drained Debezium envelopes)
+_landing/

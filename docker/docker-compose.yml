@@ -49,6 +49,9 @@ services:
   redpanda:
     image: redpandadata/redpanda:v24.1.7
     container_name: v2-redpanda
+    # Two listeners: `internal` for in-network containers (connect, console) and
+    # `external` advertised as localhost for HOST clients (cdc_sink). Without this,
+    # a host client resolves the advertised `redpanda` name and fails DNS.
     command:
       - redpanda start
       - --overprovisioned
@@ -57,9 +60,9 @@ services:
       - --reserve-memory 0M
       - --node-id 0
       - --check=false
-      - --kafka-addr PLAINTEXT://0.0.0.0:9092
-      - --advertise-kafka-addr PLAINTEXT://redpanda:9092
-    ports: ["9092:9092"]
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+    ports: ["19092:19092"]
 
   connect:
     image: quay.io/debezium/connect:2.7.3.Final

@@ -2,9 +2,10 @@
 -- inserts (c), updates (u), and deletes (d).
 --   docker exec -i v2-postgres psql -U postgres -d ecommerce < docker/generate_changes.sql
 
--- insert (op=c)
+-- insert (op=c) — re-runnable
 INSERT INTO orders (order_id, customer_id, amount, currency, order_status, order_date)
-VALUES ('O2001','C002', 99.00,'USD','paid','2026-08-15');
+VALUES ('O2001','C002', 99.00,'USD','paid','2026-08-15')
+ON CONFLICT (order_id) DO NOTHING;
 
 -- update (op=u) — status change, with full before-image (REPLICA IDENTITY FULL)
 UPDATE orders SET order_status='shipped', updated_at=now() WHERE order_id='O1003';

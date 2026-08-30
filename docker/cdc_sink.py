@@ -25,7 +25,9 @@ def main():
     from kafka import KafkaConsumer  # kafka-python
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("--brokers", default="localhost:9092")
+    # Redpanda's EXTERNAL listener (see docker-compose). Host clients must use
+    # this, not 9092 (which advertises the in-network name `redpanda`).
+    ap.add_argument("--brokers", default="localhost:19092")
     ap.add_argument("--out", default="./_landing/cdc")
     ap.add_argument("--once", action="store_true", help="drain what's available then exit")
     args = ap.parse_args()
