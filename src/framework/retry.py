@@ -29,6 +29,13 @@ TRANSIENT_MARKERS = (
     "deadlock",
     "could not connect",
     "broken pipe",
+    # Delta optimistic-concurrency conflicts (two parallel objects MERGE the same
+    # shared control table) — safe to retry.
+    "concurrentappend",
+    "concurrentdelete",
+    "concurrentmodification",
+    "conflicting",
+    "concurrent update",
 )
 
 

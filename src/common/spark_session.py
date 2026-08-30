@@ -29,6 +29,9 @@ PERFORMANCE_CONF = {
     # Keep shuffle partitions modest for a small-data workload; AQE coalesces
     # further at runtime. Avoids the 200-tiny-file default blow-up.
     "spark.sql.shuffle.partitions": "64",
+    # FAIR scheduling so the parallel per-object runner's concurrent Spark jobs
+    # share the cluster fairly instead of queueing FIFO (framework.runner).
+    "spark.scheduler.mode": "FAIR",
 }
 
 

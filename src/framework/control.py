@@ -17,6 +17,8 @@ import yaml
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
+from framework.retry import with_retry
+
 _SOURCES_YAML = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "config",
@@ -172,6 +174,7 @@ def get_watermark(spark: SparkSession, object_id: str, catalog: str = "ecommerce
     return df[0][0] if df and df[0][0] is not None else "1900-01-01 00:00:00"
 
 
+@with_retry(max_attempts=5, base_delay=0.5)
 def set_watermark(
     spark: SparkSession,
     object_id: str,
@@ -181,6 +184,7 @@ def set_watermark(
     watermark_column: str | None = None,
     catalog: str = "ecommerce_dev",
 ):
+    # Retried: parallel objects MERGE this shared table concurrently (framework.runner).
     from delta.tables import DeltaTable
 
     df = (

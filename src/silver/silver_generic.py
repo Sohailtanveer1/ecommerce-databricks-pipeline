@@ -21,7 +21,7 @@ from pyspark.sql import functions as F  # noqa: E402
 
 from common.spark_session import get_spark  # noqa: E402
 from framework import control, quarantine  # noqa: E402
-from framework.alerting import raise_alert  # noqa: E402
+from framework.runner import run_objects  # noqa: E402
 from framework.standardize import standardize  # noqa: E402
 
 CATALOG = os.environ.get("CATALOG", "ecommerce_dev")
@@ -82,31 +82,12 @@ def transform_object(spark: SparkSession, obj: dict):
 
 
 def run(spark: SparkSession):
-    for obj in [o.__dict__ for o in control.load_sources()]:
-        if not obj.get("enabled", True):
-            continue
-        try:
-            transform_object(spark, obj)
-        except Exception as exc:  # noqa: BLE001 - isolate per object
-            raise_alert(
-                spark,
-                severity="CRITICAL",
-                source=obj["object_id"],
-                title=f"Silver transform failed: {obj['object_id']}",
-                body=str(exc),
-                catalog=CATALOG,
-            )
-            control.log_run(
-                spark,
-                run_id=control.new_run_id(),
-                pipeline="silver_generic",
-                object_id=obj["object_id"],
-                layer="silver",
-                status="FAILED",
-                error=str(exc),
-                catalog=CATALOG,
-            )
-            print(f"[silver] FAILED {obj['object_id']}: {exc}")
+    objects = [o.__dict__ for o in control.load_sources() if o.enabled]
+    # Objects transformed to Silver in PARALLEL (framework.runner); each MERGEs its
+    # own table and quarantines its own bad rows — isolation + resume unchanged.
+    run_objects(
+        spark, objects, transform_object, pipeline="silver_generic", catalog=CATALOG, layer="silver"
+    )
 
 
 if __name__ == "__main__":

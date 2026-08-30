@@ -23,7 +23,7 @@ from pyspark.sql import functions as F  # noqa: E402
 
 from common.spark_session import get_spark  # noqa: E402
 from framework import control  # noqa: E402
-from framework.alerting import raise_alert  # noqa: E402
+from framework.runner import run_objects  # noqa: E402
 
 CATALOG = os.environ.get("CATALOG", "ecommerce_dev")
 ADLS = os.environ.get("ADLS", "REPLACE_ME")
@@ -70,19 +70,15 @@ def ingest_object(spark: SparkSession, obj: dict):
 
 
 def run(spark: SparkSession):
-    for obj in control.get_objects(spark, "csv", CATALOG):
-        try:
-            ingest_object(spark, obj)
-        except Exception as exc:  # noqa: BLE001
-            raise_alert(
-                spark,
-                severity="WARN",
-                source=obj["object_id"],
-                title=f"CSV ingest failed: {obj['object_id']}",
-                body=str(exc),
-                catalog=CATALOG,
-            )
-            print(f"[csv] FAILED {obj['object_id']}: {exc}")
+    # Objects processed in PARALLEL (framework.runner) — per-object isolation +
+    # resume behaviour unchanged; each object keeps its own checkpoint/table.
+    run_objects(
+        spark,
+        control.get_objects(spark, "csv", CATALOG),
+        ingest_object,
+        pipeline="csv_to_bronze",
+        catalog=CATALOG,
+    )
 
 
 if __name__ == "__main__":

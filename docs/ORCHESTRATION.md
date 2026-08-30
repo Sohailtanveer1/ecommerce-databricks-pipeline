@@ -52,6 +52,30 @@ etc., with zero new pipelines when you add more.
 - **rest**: raw JSON overwritten per date; Silver dedups on PK.
 - **csv**: Auto Loader exactly-once file discovery.
 
+## Parallelism (per-object)
+
+Objects within a source are processed **in parallel**, not sequentially, to cut
+run time — without changing error handling or resume behaviour.
+
+- **How:** `framework.runner.run_objects` submits each object on a driver-side
+  thread pool; Spark runs the independent jobs concurrently on the **shared**
+  cluster under the **FAIR** scheduler (`spark.scheduler.mode=FAIR`). N objects
+  finish in ~`max(object_time)` instead of `sum(object_time)`. Degree of
+  parallelism = `MAX_PARALLEL` (default 4).
+- **Two levels, same as retry:** ADF `ForEach` runs `batchCount` objects in
+  parallel *across* activities (watermark Copy); `run_objects` parallelizes
+  objects *inside* the Databricks job (cdc/rest/csv/silver).
+- **Unchanged by design:**
+  - *isolation* — each object has its own try/except; one failure is logged
+    FAILED + alerted and never stops the others;
+  - *idempotency/exactly-once* — each object keeps its own Auto Loader checkpoint,
+    watermark, and MERGE target, so correctness is identical to the sequential run;
+  - *resume* — failures land in `control.pipeline_runs`, so pipeline retry still
+    reprocesses only the FAILED objects.
+- **Concurrency safety:** per-object writes go to different Bronze/Silver tables
+  (no conflict); the one shared MERGE (`control.watermarks`) is wrapped in retry
+  for Delta optimistic-concurrency conflicts.
+
 ## Alerting & monitoring
 
 - `control.alerts` is a **decoupled outbox** — jobs append, `dispatch_alerts`

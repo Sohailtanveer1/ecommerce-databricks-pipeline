@@ -25,7 +25,7 @@ from pyspark.sql import functions as F  # noqa: E402
 
 from common.spark_session import get_spark  # noqa: E402
 from framework import control  # noqa: E402
-from framework.alerting import raise_alert  # noqa: E402
+from framework.runner import run_objects  # noqa: E402
 
 CATALOG = os.environ.get("CATALOG", "ecommerce_dev")
 LANDING_CDC = os.environ.get(
@@ -109,33 +109,15 @@ def ingest_object(spark: SparkSession, obj: dict):
 
 
 def run(spark: SparkSession):
-    objects = control.get_objects(spark, "cdc", CATALOG)
-    print(f"[cdc] {len(objects)} object(s) to process")
-    for obj in objects:
-        try:
-            ingest_object(spark, obj)
-        except Exception as exc:  # noqa: BLE001 - isolate per-object failure
-            # One bad table must not fail the whole batch (pipeline-level retry
-            # will reprocess only this object from the run log).
-            raise_alert(
-                spark,
-                severity="CRITICAL",
-                source=obj["object_id"],
-                title=f"CDC ingest failed: {obj['object_id']}",
-                body=str(exc),
-                catalog=CATALOG,
-            )
-            control.log_run(
-                spark,
-                run_id=control.new_run_id(),
-                pipeline="cdc_to_bronze",
-                object_id=obj["object_id"],
-                layer="bronze",
-                status="FAILED",
-                error=str(exc),
-                catalog=CATALOG,
-            )
-            print(f"[cdc] FAILED {obj['object_id']}: {exc}")
+    # CDC tables applied in PARALLEL (framework.runner); one bad table is isolated
+    # + logged FAILED (pipeline retry reprocesses only it). MERGE per table = safe.
+    run_objects(
+        spark,
+        control.get_objects(spark, "cdc", CATALOG),
+        ingest_object,
+        pipeline="cdc_to_bronze",
+        catalog=CATALOG,
+    )
 
 
 if __name__ == "__main__":

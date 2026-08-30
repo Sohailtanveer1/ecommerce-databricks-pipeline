@@ -26,8 +26,8 @@ from pyspark.sql import functions as F  # noqa: E402
 
 from common.spark_session import get_spark  # noqa: E402
 from framework import control  # noqa: E402
-from framework.alerting import raise_alert  # noqa: E402
 from framework.retry import with_retry  # noqa: E402
+from framework.runner import run_objects  # noqa: E402
 
 CATALOG = os.environ.get("CATALOG", "ecommerce_dev")
 ADLS = os.environ.get("ADLS", "REPLACE_ME")
@@ -96,19 +96,15 @@ def ingest_object(spark: SparkSession, obj: dict, run_date: str):
 
 def run(spark: SparkSession, run_date: str | None = None):
     run_date = run_date or date.today().isoformat()
-    for obj in control.get_objects(spark, "rest", CATALOG):
-        try:
-            ingest_object(spark, obj, run_date)
-        except Exception as exc:  # noqa: BLE001
-            raise_alert(
-                spark,
-                severity="WARN",
-                source=obj["object_id"],
-                title=f"REST ingest failed: {obj['object_id']}",
-                body=str(exc),
-                catalog=CATALOG,
-            )
-            print(f"[rest] FAILED {obj['object_id']}: {exc}")
+    # Endpoints pulled in PARALLEL (framework.runner); per-object isolation + resume
+    # unchanged (raw JSON overwritten per date; Silver dedups on PK).
+    run_objects(
+        spark,
+        control.get_objects(spark, "rest", CATALOG),
+        lambda s, o: ingest_object(s, o, run_date),
+        pipeline="rest_to_bronze",
+        catalog=CATALOG,
+    )
 
 
 if __name__ == "__main__":

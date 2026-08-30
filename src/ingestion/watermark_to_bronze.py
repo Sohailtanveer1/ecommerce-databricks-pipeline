@@ -21,6 +21,7 @@ from pyspark.sql import functions as F  # noqa: E402
 from common.spark_session import get_spark  # noqa: E402
 from framework import control  # noqa: E402
 from framework.alerting import raise_alert  # noqa: E402
+from framework.runner import run_objects  # noqa: E402
 
 CATALOG = os.environ.get("CATALOG", "ecommerce_dev")
 ADLS = os.environ.get("ADLS", "REPLACE_ME")
@@ -112,29 +113,16 @@ def ingest_object(spark: SparkSession, obj: dict):
 
 
 def run(spark: SparkSession):
-    for obj in control.get_objects(spark, "watermark", CATALOG):
-        try:
-            ingest_object(spark, obj)
-        except Exception as exc:  # noqa: BLE001
-            raise_alert(
-                spark,
-                severity="CRITICAL",
-                source=obj["object_id"],
-                title=f"Watermark ingest failed: {obj['object_id']}",
-                body=str(exc),
-                catalog=CATALOG,
-            )
-            control.log_run(
-                spark,
-                run_id=control.new_run_id(),
-                pipeline="watermark_to_bronze",
-                object_id=obj["object_id"],
-                layer="bronze",
-                status="FAILED",
-                error=str(exc),
-                catalog=CATALOG,
-            )
-            print(f"[watermark] FAILED {obj['object_id']}: {exc}")
+    # Tables loaded in PARALLEL (framework.runner). Each keeps its own checkpoint
+    # and advances its own watermark (retried on concurrent write); a failing
+    # table is isolated + logged FAILED for reprocess-only-failed retry.
+    run_objects(
+        spark,
+        control.get_objects(spark, "watermark", CATALOG),
+        ingest_object,
+        pipeline="watermark_to_bronze",
+        catalog=CATALOG,
+    )
 
 
 if __name__ == "__main__":
