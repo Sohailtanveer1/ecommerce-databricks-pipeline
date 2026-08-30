@@ -41,6 +41,7 @@ class SourceObject:
     target_quarantine: str
     options: dict = field(default_factory=dict)
     dq: dict = field(default_factory=dict)
+    standardize: dict = field(default_factory=dict)
     enabled: bool = True
 
 
@@ -67,6 +68,7 @@ def _flatten(cfg: dict) -> list[SourceObject]:
                     "primary_keys",
                     "load_type",
                     "dq",
+                    "standardize",
                 )
             }
             out.append(
@@ -86,6 +88,7 @@ def _flatten(cfg: dict) -> list[SourceObject]:
                     target_quarantine=f"{catalog}.quarantine.{system}__{name}",
                     options=options,
                     dq=obj.get("dq", {}),
+                    standardize=obj.get("standardize", {}),
                     enabled=default_enabled,
                 )
             )

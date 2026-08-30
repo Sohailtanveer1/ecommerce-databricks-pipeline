@@ -22,6 +22,7 @@ from pyspark.sql import functions as F  # noqa: E402
 from common.spark_session import get_spark  # noqa: E402
 from framework import control, quarantine  # noqa: E402
 from framework.alerting import raise_alert  # noqa: E402
+from framework.standardize import standardize  # noqa: E402
 
 CATALOG = os.environ.get("CATALOG", "ecommerce_dev")
 
@@ -59,9 +60,20 @@ def transform_object(spark: SparkSession, obj: dict):
         print(f"[silver] {obj['object_id']}: no bronze yet, skip")
         return
 
-    src = _dedup(spark.read.table(bronze), pks).withColumn(
-        "processed_timestamp", F.current_timestamp()
+    # Standardize FIRST (canonical names + types), so dedup keys, DQ rules, and the
+    # Silver schema all speak the canonical vocabulary.
+    std_cfg = obj.get("standardize") or {}
+    rename = dict(std_cfg.get("rename") or {})
+    # Canonicalize each table's differently-spelled audit column to one Silver name.
+    if obj.get("watermark_column"):
+        rename.setdefault(obj["watermark_column"], "updated_at")
+    standardized = standardize(
+        spark.read.table(bronze),
+        rename=rename,
+        cast=std_cfg.get("cast"),
+        trim_strings=std_cfg.get("trim_strings", True),
     )
+    src = _dedup(standardized, pks).withColumn("processed_timestamp", F.current_timestamp())
     valid, _ = quarantine.apply(spark, src, obj, run_id, CATALOG)  # bad rows -> quarantine
     # never let quarantine metadata leak into Silver
     valid = valid.drop(*[c for c in ("_rescued_data",) if c in valid.columns])

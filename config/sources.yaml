@@ -87,6 +87,8 @@ sources:
       - name: marketing_ad_spend
         path: "landing/partner_files/marketing_ad_spend/"
         primary_keys: [spend_date, channel, campaign, region]
+        standardize:                           # CSV lands as all-strings; cast to canonical types
+          cast: { impressions: bigint, clicks: bigint, spend: "decimal(18,2)" }
         dq:                                    # bad rows -> quarantine, good rows -> Silver
           not_null: [spend_date, channel, spend]
           allowed_values: { currency: [USD, EUR, GBP, INR] }
