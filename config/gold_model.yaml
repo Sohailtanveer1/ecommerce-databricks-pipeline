@@ -1,0 +1,30 @@
+# ============================================================================
+# GOLD DIMENSIONAL MODEL (declarative). Consumed by src/gold/gold_generic.py.
+# Define dimensions (SCD2) and facts here; the builder generates surrogate keys,
+# manages SCD2 versioning, and resolves point-in-time dimension keys on facts.
+# Naming/type conventions are applied automatically (see docs/NAMING_CONVENTIONS.md).
+# ============================================================================
+catalog: ecommerce_dev
+
+dimensions:
+  - name: dim_customer
+    source: silver.sqlserver_erp__customers
+    natural_key: customer_id           # -> customer_id (natural), customer_sk (surrogate)
+    scd2: [segment, region]            # a change in these opens a new version
+    attributes: [name, email, segment, region]
+
+  - name: dim_product
+    source: silver.sqlserver_erp__products
+    natural_key: product_id
+    scd2: [category]
+    attributes: [product_name, category, unit_cost]
+
+facts:
+  - name: fact_orders
+    source: silver.sqlserver_erp__orders
+    grain: [order_id]                  # one row per order
+    event_date: order_date             # used for point-in-time SCD2 key lookup
+    measures: [amount]
+    degenerate: [order_status, currency, order_date]
+    dimensions:                        # resolve each to its surrogate key at event time
+      - { dim: dim_customer, natural_key: customer_id }
