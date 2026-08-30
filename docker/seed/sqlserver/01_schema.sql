@@ -6,24 +6,26 @@ GO
 USE erp;
 GO
 
+-- NOTE: watermark column name differs per table on purpose (real sources never
+-- agree). The pipeline reads the name per-object from control.source_objects.
 CREATE TABLE dbo.customers (
     customer_id  VARCHAR(20) PRIMARY KEY, name VARCHAR(100), email VARCHAR(120),
     segment VARCHAR(20), region VARCHAR(20),
-    modified_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());
+    last_updated_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());
 CREATE TABLE dbo.products (
     product_id VARCHAR(20) PRIMARY KEY, product_name VARCHAR(120), category VARCHAR(60),
     unit_cost DECIMAL(12,2), modified_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());
 CREATE TABLE dbo.orders (
     order_id VARCHAR(20) PRIMARY KEY, customer_id VARCHAR(20), order_date DATE,
     amount DECIMAL(12,2), currency VARCHAR(3), order_status VARCHAR(20),
-    modified_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());
+    lastupdatedate DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());
 CREATE TABLE dbo.order_items (
     order_item_id VARCHAR(20) PRIMARY KEY, order_id VARCHAR(20), product_id VARCHAR(20),
     quantity INT, unit_price DECIMAL(12,2),
-    modified_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());
+    updated_ts DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());
 CREATE TABLE dbo.inventory (
     product_id VARCHAR(20), warehouse_id VARCHAR(20), on_hand INT,
-    modified_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    last_change_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     PRIMARY KEY (product_id, warehouse_id));
 CREATE TABLE dbo.returns (
     return_id VARCHAR(20) PRIMARY KEY, order_id VARCHAR(20), reason VARCHAR(120),

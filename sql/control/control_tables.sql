@@ -31,6 +31,7 @@ TBLPROPERTIES (delta.autoOptimize.optimizeWrite = true);
 -- Per-object high-watermark (watermark pattern) + last status.
 CREATE TABLE IF NOT EXISTS control.watermarks (
     object_id            STRING NOT NULL,
+    watermark_column     STRING,              -- the per-table column this value came from
     last_watermark_value STRING,              -- string form of the max watermark loaded
     last_run_id          STRING,
     last_status          STRING,              -- SUCCEEDED | FAILED | RUNNING

@@ -26,18 +26,18 @@ sources:
     objects:
       - schema: dbo
         table: orders
-        watermark_column: modified_at
+        watermark_column: lastupdatedate          # per-table watermark column names differ
         primary_keys: [order_id]
         load_type: incremental
         dq:
           not_null: [order_id, customer_id, order_date]
           ranges: { amount: { min: 0 } }
           allowed_values: { order_status: [pending, paid, shipped, delivered, cancelled, returned] }
-      - { schema: dbo, table: order_items,  watermark_column: modified_at, primary_keys: [order_item_id],   load_type: incremental }
-      - { schema: dbo, table: customers,    watermark_column: modified_at, primary_keys: [customer_id],     load_type: incremental }
-      - { schema: dbo, table: products,     watermark_column: modified_at, primary_keys: [product_id],      load_type: incremental }
-      - { schema: dbo, table: inventory,    watermark_column: modified_at, primary_keys: [product_id, warehouse_id], load_type: incremental }
-      - { schema: dbo, table: returns,      watermark_column: modified_at, primary_keys: [return_id],       load_type: incremental }
+      - { schema: dbo, table: order_items,  watermark_column: updated_ts,      primary_keys: [order_item_id],   load_type: incremental }
+      - { schema: dbo, table: customers,    watermark_column: last_updated_at, primary_keys: [customer_id],     load_type: incremental }
+      - { schema: dbo, table: products,     watermark_column: modified_at,     primary_keys: [product_id],      load_type: incremental }
+      - { schema: dbo, table: inventory,    watermark_column: last_change_at,  primary_keys: [product_id, warehouse_id], load_type: incremental }
+      - { schema: dbo, table: returns,      watermark_column: modified_at,     primary_keys: [return_id],       load_type: incremental }
       - { schema: dbo, table: fx_reference, watermark_column: modified_at, primary_keys: [currency, as_of_date], load_type: full }  # small dim, full each run
 
   # ---- Source #1: PostgreSQL (Docker) — log-based CDC via Debezium -----------

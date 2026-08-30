@@ -175,14 +175,15 @@ def set_watermark(
     value: str,
     run_id: str,
     status: str = "SUCCEEDED",
+    watermark_column: str | None = None,
     catalog: str = "ecommerce_dev",
 ):
     from delta.tables import DeltaTable
 
     df = (
         spark.createDataFrame(
-            [(object_id, str(value), run_id, status)],
-            ["object_id", "last_watermark_value", "last_run_id", "last_status"],
+            [(object_id, watermark_column, str(value), run_id, status)],
+            ["object_id", "watermark_column", "last_watermark_value", "last_run_id", "last_status"],
         )
         .withColumn("last_run_ts", F.current_timestamp())
         .withColumn("updated_at", F.current_timestamp())

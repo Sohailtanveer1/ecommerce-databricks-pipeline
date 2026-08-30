@@ -28,6 +28,16 @@ LANDING = f"abfss://landing@{ADLS}.dfs.core.windows.net"
 CKPT = f"abfss://checkpoints@{ADLS}.dfs.core.windows.net/watermark"
 
 
+def _resolve_column(df: DataFrame, wm_col: str | None) -> str | None:
+    """Match the configured watermark column to the DataFrame's actual column,
+    ignoring case (source/landed casing often differs). Returns the real column
+    name or None if absent."""
+    if not wm_col:
+        return None
+    by_lower = {c.lower(): c for c in df.columns}
+    return by_lower.get(wm_col.lower())
+
+
 def ingest_object(spark: SparkSession, obj: dict):
     object_id, table, bronze = obj["object_id"], obj["source_table"], obj["target_bronze"]
     wm_col = obj["watermark_column"]
@@ -53,10 +63,25 @@ def ingest_object(spark: SparkSession, obj: dict):
         enriched.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(
             bronze
         )
-        if wm_col and wm_col in df.columns:
-            mx = df.agg(F.max(wm_col)).collect()[0][0]
+        # Resolve the per-table watermark column case-insensitively (sources spell
+        # it lastupdatedate / last_updated_at / updated_ts ...). If it's genuinely
+        # absent, alert rather than silently not advancing (that would re-pull forever).
+        actual = _resolve_column(df, wm_col)
+        if actual:
+            mx = df.agg(F.max(actual)).collect()[0][0]
             if mx is not None:
-                control.set_watermark(spark, object_id, str(mx), run_id, catalog=CATALOG)
+                control.set_watermark(
+                    spark, object_id, str(mx), run_id, watermark_column=wm_col, catalog=CATALOG
+                )
+        elif wm_col:
+            raise_alert(
+                spark,
+                severity="WARN",
+                source=object_id,
+                title=f"Watermark column '{wm_col}' not found for {object_id}",
+                body=f"available columns: {df.columns}",
+                catalog=CATALOG,
+            )
 
     q = (
         spark.readStream.format("cloudFiles")
