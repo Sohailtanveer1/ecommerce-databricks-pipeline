@@ -8,21 +8,29 @@ the compute; Unity Catalog governs.
 ```mermaid
 flowchart LR
     subgraph Sources
-      PG[("PostgreSQL\nDocker")]:::s
-      SS[("SQL Server\nDocker")]:::s
+      PG[("PostgreSQL")]:::s
+      SS[("SQL Server")]:::s
       API{{"REST APIs"}}:::s
-      CSV["CSV drops\n(other team)"]:::s
+      CSV["CSV drops (other team)"]:::s
     end
 
-    subgraph Ingest["Landing + Bronze (metadata-driven)"]
-      DBZ["Debezium -> Redpanda\n-> cdc_sink"]
+    subgraph Producers["Source -> Landing (stage raw files)"]
+      DBZ["Debezium -> Redpanda -> cdc_sink"]
       SHIR["ADF Copy via SHIR"]
-      RST["rest_to_bronze"]
-      CSVJ["csv_to_bronze (Auto Loader)"]
+      RSTF["rest_to_bronze (fetch)"]
+      DROP["team drops files"]
+    end
+
+    LAND[("landing/  (raw files, immutable)\ncdc · sqlserver · rest · partner_files")]:::l
+
+    subgraph Loaders["Landing -> Bronze (Auto Loader / MERGE)"]
+      CDCJ["cdc_to_bronze"]
+      WMJ["watermark_to_bronze"]
+      RSTB["rest_to_bronze (write)"]
+      CSVJ["csv_to_bronze"]
     end
 
     subgraph Lake["Databricks / Delta / Unity Catalog"]
-      LAND["landing/*"]
       BR["Bronze"]
       SI["Silver (dedup, DQ, quarantine)"]
       GO["Gold (SCD2, facts, FX)"]
@@ -33,15 +41,23 @@ flowchart LR
 
     PG --> DBZ --> LAND
     SS --> SHIR --> LAND
-    API --> RST --> BR
-    CSV --> CSVJ --> BR
-    LAND --> BR --> SI --> GO --> GV
-    CTL -. drives .- Ingest
+    API --> RSTF --> LAND
+    CSV --> DROP --> LAND
+    LAND --> CDCJ & WMJ & RSTB & CSVJ --> BR
+    BR --> SI --> GO --> GV
+    CTL -. drives .- Loaders
     CTL -. drives .- Lake
 
     classDef s fill:#e8f0fe,stroke:#4c6ef5;
     classDef c fill:#fff3bf,stroke:#f08c00;
+    classDef l fill:#fff9db,stroke:#f59f00;
 ```
+
+> **Every source lands first.** Watermark/CDC/CSV stage raw files to `landing/`
+> then a loader Auto-Loads them into Bronze. **REST** is the one job that fetches,
+> lands the raw JSON, and writes Bronze in a single pass (it still keeps the raw
+> file for replay) — split it into land + load if you want it identical to the
+> others.
 
 ## The four ingestion patterns
 
