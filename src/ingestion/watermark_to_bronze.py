@@ -62,6 +62,11 @@ def ingest_object(spark: SparkSession, obj: dict):
         spark.readStream.format("cloudFiles")
         .option("cloudFiles.format", "parquet")
         .option("cloudFiles.schemaLocation", f"{ckpt}/_schema")
+        # Permissive: type-mismatched values -> _rescued_data (not a failed load);
+        # evolve schema instead of crashing. A wholly corrupt parquet file is an
+        # infra issue (ADF wrote it) -> per-object try/except alerts, not silent loss.
+        .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
+        .option("rescuedDataColumn", "_rescued_data")
         .load(src)
         .writeStream.foreachBatch(_batch)
         .option("checkpointLocation", ckpt)

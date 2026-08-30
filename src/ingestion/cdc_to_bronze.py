@@ -92,6 +92,10 @@ def ingest_object(spark: SparkSession, obj: dict):
         .option("cloudFiles.format", "json")
         .option("cloudFiles.schemaLocation", f"{ckpt}/_schema")
         .option("cloudFiles.inferColumnTypes", "true")
+        # PERMISSIVE ingestion: a malformed/unexpected envelope is captured in
+        # _rescued_data instead of failing the Bronze load; evolve, don't crash.
+        .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
+        .option("rescuedDataColumn", "_rescued_data")
         .load(src_path)
     )
     q = (

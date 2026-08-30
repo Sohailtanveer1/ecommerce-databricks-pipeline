@@ -6,11 +6,26 @@ routed to a per-object **quarantine table**, alerted on, and can be **remediated
 and promoted back to Silver. Metadata-driven, so it applies to every object with
 zero per-table code.
 
-## Where it runs
+## Where it runs — capture at Bronze, quarantine at Silver
 
-Bronze → **Silver** (`src/silver/silver_generic.py`) calls
-`framework.quarantine.apply()` for each object: good rows MERGE into Silver, bad
-rows append to `quarantine.<system>__<object>`.
+Two kinds of "bad" fail at two different stages, so they're handled in two places:
+
+| Kind | Fails at | Handled by |
+|---|---|---|
+| **Structurally corrupt** (unparseable row, wrong type, extra column, bad encoding) | **Bronze read** (parse time) | **PERMISSIVE reader + `_rescued_data`** so the load never fails and nothing drops; the row lands in Bronze *flagged* |
+| **Rule violation** (parseable but `null`/negative/invalid value) | not at read — it's valid data | **Silver** DQ rules |
+
+So the mechanism that stops a corrupt record from crashing the Bronze load lives
+at the **Bronze reader** (all four loaders use `PERMISSIVE`/`rescuedDataColumn` —
+never `FAILFAST` or `DROPMALFORMED`). The **routing** of bad rows to a quarantine
+table happens once, at **Bronze → Silver** (`src/silver/silver_generic.py` →
+`framework.quarantine.apply()`), where both the `_rescued_data`-flagged rows and
+the rule failures are split off.
+
+**Why not quarantine at Bronze?** Keep Bronze a faithful, append-only, replayable
+copy of the source — bad rows included but flagged. Making the cleansing decision
+at the Silver boundary preserves "replay everything from Bronze" and keeps one
+quarantine step instead of two.
 
 ## What gets quarantined
 
